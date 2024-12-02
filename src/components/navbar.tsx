@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { getBlogName } from "@/lib/requests";
 
-const GITHUB_URL = "https://github.com/atharvadeosthale/hashnode-headless-blog";
+const GITHUB_URL = "https://github.com/mwihoti/world-view";
 
 export default async function Navbar() {
   const title = await getBlogName();
