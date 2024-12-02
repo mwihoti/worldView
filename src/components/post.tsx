@@ -18,7 +18,11 @@ export default function Post({ slug }: Props) {
 
   return (
     <div>
-      <img src={data?.coverImage.url} alt="" className="w-full" />
+      {data?.coverImage && (
+        
+        <img src={data?.coverImage.url } alt="loadng post " className="w-full" />
+      )}
+      
       <h1 className="text-4xl lg:text-6xl text-center leading-relaxed font-bold mt-5">
         {data?.title}
       </h1>

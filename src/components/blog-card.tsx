@@ -10,11 +10,10 @@ export default function BlogCard({ post }: Props) {
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <img
-          className="rounded-lg h-full"
-          src={post.coverImage.url}
-          alt={post.title}
-        />
+      {post?.coverImage && (
+        
+        <img src={post?.coverImage.url } alt="loadng post " className="w-full" />
+      )}
       </CardHeader>
       <CardContent>
         <h2 className="text-xl font-bold">
