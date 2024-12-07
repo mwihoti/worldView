@@ -25,8 +25,7 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Run build
-      ##run: npm run build
+
 
     - name: Send Notification
       run: echo "A push or merge occurred in the '${{ github.ref_name }}' branch"
