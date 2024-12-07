@@ -1,4 +1,4 @@
-name: GitHub Actions Demo
+name: world-view automation
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - main
 
 jobs:
-  build:
+  
     runs-on: ubuntu-latest
 
     steps:
