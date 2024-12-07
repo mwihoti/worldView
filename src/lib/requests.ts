@@ -1,11 +1,13 @@
 import request, { gql } from "graphql-request";
 import { env } from "./env";
+import { PageProps } from '../../.next/types/app/page';
 import {
   GetPostsArgs,
   GetPostsResponse,
   SubscribeToNewsletterResponse,
   PublicationName,
   GetPostBySlugResponse,
+  PostsResponse,
 } from "./types";
 
 const endpoint = env.NEXT_PUBLIC_HASHNODE_ENDPOINT;
@@ -33,12 +35,15 @@ export async function getBlogName() {
   };
 }
 
-export async function getPosts({ first = 9, pageParam = "" }: GetPostsArgs) {
+export async function getPosts({ author, first = 9, pageParam = "" }: GetPostsArgs) {
   const query = gql`
-    query getPosts($publicationId: ObjectId!, $first: Int!, $after: String) {
+    query getPosts($publicationId: ObjectId!, $first: Int!, $after: String, $author: String) {
       publication(id: $publicationId) {
-        posts(first: $first, after: $after) {
+        posts(first: $first, 
+        after: $after
+        ) {
           edges {
+    
             node {
               id
               title
@@ -65,7 +70,8 @@ export async function getPosts({ first = 9, pageParam = "" }: GetPostsArgs) {
   const response = await request<GetPostsResponse>(endpoint, query, {
     publicationId,
     first,
-    after: pageParam,
+    after: pageParam
+    
   });
 
   return response.publication.posts.edges;
@@ -122,4 +128,42 @@ export async function getPostBySlug(slug: string) {
   });
 
   return response.publication.post;
+}
+
+
+export async function getPostsByAuthor(authorName: string, pageParam: "") {
+  const query = gql`
+    query getPostsByAuthor($publicationId: ObjectId!, $authorName: String!, $after: String) {
+    publication(id: $publicationId) {
+      posts(filter: { author: { name: $authorName } 
+      first: 8,
+      after: $after}) {
+      edges {
+      node {
+      id
+      title
+      subtitle
+      slug
+      content {
+        text
+      }
+      coverImage {
+        url
+      }
+      author {
+        name
+        profilePicture
+      }}}}
+    }}
+  `;
+
+  const response = await request<PostsResponse>(endpoint, query, {
+    publicationId,
+    authorName,
+    after: pageParam,
+
+  });
+  return response.publication.posts.edges;
+
+
 }

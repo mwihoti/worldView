@@ -16,6 +16,17 @@ export default async function Navbar() {
           <Link href="/">{title.displayTitle || title.title}</Link>
         </div>
         <div className="flex items-center gap-5">
+          {/* Add Section Links */}
+          <Link href="/posts?author=Dennis" className="text-lg hover:text-blue-500">
+            Sports
+          </Link>
+          <Link href="/posts?author=Danny" className="text-lg hover:text-blue-500">
+            Movies & TV Shows
+          </Link>
+          <Link href="/posts?author=Daniel" className="text-lg hover:text-blue-500">
+            Tech
+          </Link>
+
           <ThemeToggler />
 
           <Button variant="secondary">

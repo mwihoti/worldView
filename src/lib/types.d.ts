@@ -9,6 +9,7 @@ export type PublicationName = {
 };
 
 export type PostMetadata = {
+  id: string,
   title: string;
   subtitle?: string;
   slug: string;
@@ -70,3 +71,39 @@ export type GetPostBySlugResponse = {
     };
   };
 };
+
+export type Author = {
+  name: string;
+  profilePicture?: string;
+};
+
+export type PostContent = {
+  text: string;
+};
+
+export type CoverImage = {
+  url: string;
+};
+
+export type PostNode = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  slug: string;
+  content: PostContent;
+  coverImage?: CoverImage;
+  author: Author;
+};
+
+export type PostEdge = {
+  node: PostNode;
+};
+
+export type PostsResponse = {
+  publication: {
+    posts: {
+      edges: PostEdge[];
+    };
+  };
+};
+
