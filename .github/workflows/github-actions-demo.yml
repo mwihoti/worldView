@@ -29,3 +29,10 @@ jobs:
 
     - name: Send Notification
       run: echo "A push or merge occurred in the '${{ github.ref_name }}' branch"
+
+    - name: List files in the repository
+      run: ls ${{ github.workspace }}
+    
+    - run: echo" The job was automatically triggered by a ${{ github.event_name }} event."
+    - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
