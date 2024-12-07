@@ -1,5 +1,4 @@
 name: world-view automation
-
 on:
   push:
     branches:
@@ -10,29 +9,36 @@ on:
       - main
 
 jobs:
-  
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - name: Install dependencies
+        run: npm install
+      - name: Run tests
+        run: npm test
+      - name: Build project
+        run: npm run build
+      - name: List files in the repository
+        run: ls ${{ github.workspace }}
+      - run: echo " The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 16
-
-    - name: Install dependencies
-      run: npm install
-
-
-
-    - name: Send Notification
-      run: echo "A push or merge occurred in the '${{ github.ref_name }}' branch"
-
-    - name: List files in the repository
-      run: ls ${{ github.workspace }}
-    
-    - run: echo " The job was automatically triggered by a ${{ github.event_name }} event."
-    - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-
+  notify:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send Notification
+        run: echo "A push or merge occurred in the '${{ github.ref_name }}' branch"
+      - name: List files in the repository
+        run: ls ${{ github.workspace }}
+      - name: Job Trigger Information
+        run: |
+          echo "The job was automatically triggered by a ${{ github.event_name }} event."
+          echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
