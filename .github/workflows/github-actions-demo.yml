@@ -33,6 +33,7 @@ jobs:
     steps:
       - name: Send Notification
         run: echo "A push or merge occurred in the '${{ github.ref_name }}' branch"
+              echo "The code was pushed by ${{ github.actor }}"
       - name: List files in the repository
         run: ls ${{ github.workspace }}
       - name: Job Trigger Information

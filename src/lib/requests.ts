@@ -37,7 +37,7 @@ export async function getBlogName() {
 
 export async function getPosts({ author, first = 9, pageParam = "" }: GetPostsArgs) {
   const query = gql`
-    query getPosts($publicationId: ObjectId!, $first: Int!, $after: String, $author: String) {
+    query getPosts($publicationId: ObjectId!, $first: Int!, $after: String) {
       publication(id: $publicationId) {
         posts(first: $first, 
         after: $after
