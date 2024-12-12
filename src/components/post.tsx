@@ -4,7 +4,8 @@ import { getPostBySlug } from "@/lib/requests";
 import { useQuery } from "@tanstack/react-query";
 import { notFound, useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import { faArrowLeft, faArrowUp } from "@fortawesome/free-solid-svg-icons";
+import { useEffect, useState } from "react";
 
 type Props = {
   slug: string;
@@ -16,6 +17,25 @@ export default function Post({ slug }: Props) {
     queryFn: () => getPostBySlug(slug),
   });
   const router = useRouter();
+  const [showScrollUp, setShowScrollUp] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if ( window.innerHeight + window.scrollY >= document.body.scrollHeight - 100) {
+        setShowScrollUp(true);
+      } else {
+        setShowScrollUp(false);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+
+  }, [] );
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
  if (!data) return notFound()
   return (
@@ -52,6 +72,16 @@ export default function Post({ slug }: Props) {
       >
        
       </div>
+
+            {/* Scroll Up Button */}
+            {showScrollUp && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 p-3 bg-indigo-600 text-white rounded-full shadow-md hover:bg-indigo-700 transition"
+        >
+          <FontAwesomeIcon icon={faArrowUp} className="text-lg" />
+        </button>
+            )}
     </div>
   );
 }
