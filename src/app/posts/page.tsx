@@ -6,6 +6,11 @@ import {
 } from "@tanstack/react-query";
 import { getPosts } from "@/lib/requests";
 
+type Post = {
+  cursor: string;
+  // other post properties
+};
+
 export default async function PostsPage({
   searchParams,
 }: {
@@ -16,7 +21,7 @@ export default async function PostsPage({
   await queryClient.prefetchInfiniteQuery({
     queryKey: ["posts", searchParams.author],
     queryFn: () => getPosts({ author: searchParams.author }),
-    getNextPageParam: (lastPage) =>
+    getNextPageParam: (lastPage: Post[] ) =>
       lastPage.length < 8 ? undefined : lastPage[lastPage.length - 1].cursor,
     initialPageParam: "",
   });
@@ -30,7 +35,7 @@ export default async function PostsPage({
       )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <HydrationBoundary state={dehydrate(queryClient)}>
-          <Posts author={searchParams.author} />
+          <Posts />
         </HydrationBoundary>
       </div>
     </main>
