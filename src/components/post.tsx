@@ -14,8 +14,7 @@ export default function Post({ slug }: Props) {
     queryFn: () => getPostBySlug(slug),
   });
 
-  if (!data) return notFound();
-
+ if (!data) return notFound()
   return (
     <div>
       {data?.coverImage && (
@@ -41,7 +40,7 @@ export default function Post({ slug }: Props) {
         className="blog-content text-xl leading-loose flex flex-col gap-5 mt-5"
         dangerouslySetInnerHTML={{ __html: data!.content.html }}
       >
-        <h2>Hello</h2>
+       
       </div>
     </div>
   );
