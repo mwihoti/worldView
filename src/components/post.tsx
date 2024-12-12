@@ -42,7 +42,7 @@ export default function Post({ slug }: Props) {
     <div>
         <button
         onClick={() => router.push("/")}
-        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition"
+        className="flex items-center gap-2 mb-4 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition"
       >
         <FontAwesomeIcon icon={faArrowLeft} className="text-lg" />
         <span className="text-sm font-medium">Back</span>
