@@ -2,7 +2,9 @@
 
 import { getPostBySlug } from "@/lib/requests";
 import { useQuery } from "@tanstack/react-query";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 
 type Props = {
   slug: string;
@@ -13,10 +15,18 @@ export default function Post({ slug }: Props) {
     queryKey: ["post", slug],
     queryFn: () => getPostBySlug(slug),
   });
+  const router = useRouter();
 
  if (!data) return notFound()
   return (
     <div>
+        <button
+        onClick={() => router.push("/")}
+        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition"
+      >
+        <FontAwesomeIcon icon={faArrowLeft} className="text-lg" />
+        <span className="text-sm font-medium">Back</span>
+      </button>
       {data?.coverImage && (
         
         <img src={data?.coverImage.url } alt="loadng post " className="w-full" />

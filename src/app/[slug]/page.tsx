@@ -1,3 +1,4 @@
+
 import Post from "@/components/post";
 import { getPostBySlug } from "@/lib/requests";
 import {
@@ -5,6 +6,8 @@ import {
   QueryClient,
   dehydrate,
 } from "@tanstack/react-query";
+
+import { redirect } from "next/navigation";
 
 export async function generateMetadata({
   params,
@@ -23,6 +26,7 @@ export default async function BlogPostPage({
   params: { slug: string };
 }) {
   const queryClient = new QueryClient();
+  
 
   await queryClient.prefetchQuery({
     queryKey: ["post", params.slug],
@@ -31,6 +35,13 @@ export default async function BlogPostPage({
 
   return (
     <div className="max-w-7xl w-full px-3 xl:p-0 mx-auto">
+      <div className="flex" >
+ 
+      
+      
+        
+      
+      </div>
       <HydrationBoundary state={dehydrate(queryClient)}>
         <Post slug={params.slug} />
       </HydrationBoundary>
