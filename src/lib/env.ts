@@ -15,6 +15,9 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_HASHNODE_ENDPOINT: z.url(),
     NEXT_PUBLIC_HASHNODE_PUBLICATION_ID: z.string().min(1),
+    NEXT_PUBLIC_HASHNODE_RSS_URL: z
+      .url()
+      .default("https://worldview.hashnode.dev/rss.xml"),
     NEXT_PUBLIC_SITE_URL: z.url().optional(),
   },
   /*
@@ -27,6 +30,7 @@ export const env = createEnv({
     NEXT_PUBLIC_HASHNODE_ENDPOINT: process.env.NEXT_PUBLIC_HASHNODE_ENDPOINT,
     NEXT_PUBLIC_HASHNODE_PUBLICATION_ID:
       process.env.NEXT_PUBLIC_HASHNODE_PUBLICATION_ID,
+    NEXT_PUBLIC_HASHNODE_RSS_URL: process.env.NEXT_PUBLIC_HASHNODE_RSS_URL,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   },
 });
