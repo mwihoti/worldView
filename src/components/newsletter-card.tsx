@@ -1,56 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader } from "./ui/dialog";
-import { useMutation } from "@tanstack/react-query";
-import { subscribeToNewsletter } from "@/lib/requests";
+import { useEffect, useState, useTransition } from "react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { toast } from "sonner";
-import { ClientError } from "graphql-request";
+import { subscribeToNewsletterAction } from "@/lib/actions";
 
 export default function NewsletterCard() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-
-  const { mutateAsync, isPending, error } = useMutation({
-    mutationKey: ["newsletter"],
-    mutationFn: subscribeToNewsletter,
-    onError: onError,
-    onSuccess: onSuccess,
-  });
-
-  function onSuccess() {
-    localStorage.setItem("newsletter", email);
-    toast.success(
-      "Subscribed to newsletter! Check your email to confirm your subscription."
-    );
-    setOpen(false);
-  }
-
-  function onError(err: ClientError) {
-    if (!err.response.errors) return toast.error("Something went wrong!");
-    toast.error(err.response.errors[0]!.message);
-  }
-
-  function handleOpen() {
-    // Find localStorage key to see if already registered
-    if (localStorage.getItem("newsletter")) return;
-
-    setOpen(true);
-  }
+  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    setTimeout(() => {
-      handleOpen();
+    const timer = setTimeout(() => {
+      if (!localStorage.getItem("newsletter")) setOpen(true);
     }, 5000);
+    return () => clearTimeout(timer);
   }, []);
 
+  function handleSubscribe() {
+    startTransition(async () => {
+      const result = await subscribeToNewsletterAction(email);
+      if (result.ok) {
+        localStorage.setItem("newsletter", email);
+        toast.success(result.message);
+        setOpen(false);
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
+
   return (
-    <Dialog open={open} onOpenChange={() => setOpen(!open)}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
-          <h1 className="text-2xl font-bold">Join the newsletter!</h1>
+          <DialogTitle className="text-2xl font-bold">
+            Join the newsletter!
+          </DialogTitle>
         </DialogHeader>
         <p>
           Enter your email to join the newsletter and stay up to date with the
@@ -63,7 +56,7 @@ export default function NewsletterCard() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Button onClick={() => mutateAsync(email)} disabled={isPending}>
+          <Button onClick={handleSubscribe} disabled={isPending}>
             {isPending ? "Loading..." : "Subscribe"}
           </Button>
         </div>
