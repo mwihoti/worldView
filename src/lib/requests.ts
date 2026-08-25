@@ -2,6 +2,7 @@ import { GraphQLClient, gql } from "graphql-request";
 import { env } from "./env";
 import { getRssPostBySlug, getRssPostsPage } from "./rss";
 import { getLocalPostBySlug, getLocalPostEdges } from "./local-posts";
+import { getPayloadPostBySlug, getPayloadPostEdges } from "./payload-posts";
 import {
   FullPost,
   GetPostBySlugResponse,
@@ -121,14 +122,19 @@ export async function getPosts({
     page = await getRssPostsPage();
   }
 
-  // Merge in posts restored locally (src/content/posts.ts) after they were
-  // removed from Hashnode. Remote versions win when slugs collide.
+  // Merge in posts authored in the Payload admin (/admin) and posts restored
+  // locally (src/content/posts.ts) after they were removed from Hashnode.
+  // On slug collisions: Hashnode/RSS wins over Payload, Payload over restored.
   if (!after) {
     const seen = new Set(page.edges.map((edge) => edge.node.slug));
+    const cms = (await getPayloadPostEdges()).filter(
+      (edge) => !seen.has(edge.node.slug)
+    );
+    cms.forEach((edge) => seen.add(edge.node.slug));
     const restored = getLocalPostEdges().filter(
       (edge) => !seen.has(edge.node.slug)
     );
-    const edges = [...page.edges, ...restored].sort((a, b) =>
+    const edges = [...page.edges, ...cms, ...restored].sort((a, b) =>
       (b.node.publishedAt ?? "").localeCompare(a.node.publishedAt ?? "")
     );
     return { edges, pageInfo: page.pageInfo };
@@ -176,7 +182,12 @@ export async function getPostBySlug(slug: string): Promise<FullPost | null> {
     return response.publication?.post ?? null;
   });
 
-  return post ?? (await getRssPostBySlug(slug)) ?? getLocalPostBySlug(slug);
+  return (
+    post ??
+    (await getRssPostBySlug(slug)) ??
+    (await getPayloadPostBySlug(slug)) ??
+    getLocalPostBySlug(slug)
+  );
 }
 
 export async function subscribeToNewsletter(email: string) {
