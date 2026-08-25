@@ -18,7 +18,7 @@ export function getLocalPosts(): FullPost[] {
     slug: post.slug,
     brief: toBrief(post.markdown),
     publishedAt: post.publishedAt,
-    coverImage: null,
+    coverImage: post.cover ? { url: post.cover } : null,
     author: { name: post.author },
     content: { html: marked.parse(post.markdown, { async: false }) },
   }));
