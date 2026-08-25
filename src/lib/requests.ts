@@ -1,5 +1,6 @@
 import { GraphQLClient, gql } from "graphql-request";
 import { env } from "./env";
+import { getRssPostBySlug, getRssPostsPage } from "./rss";
 import {
   FullPost,
   GetPostBySlugResponse,
@@ -105,7 +106,7 @@ export async function getPosts({
     pageInfo: { hasNextPage: false, endCursor: null },
   };
 
-  return safeRequest("getPosts", fallback, async () => {
+  const page = await safeRequest("getPosts", fallback, async () => {
     const response = await client.request<GetPostsResponse>(query, {
       publicationId,
       first,
@@ -113,6 +114,13 @@ export async function getPosts({
     });
     return response.publication?.posts ?? fallback;
   });
+
+  // No GraphQL access (paid plan required)? Serve the public RSS feed instead.
+  if (page.edges.length === 0 && !after) {
+    return getRssPostsPage();
+  }
+
+  return page;
 }
 
 /*
@@ -146,13 +154,15 @@ export async function getPostBySlug(slug: string): Promise<FullPost | null> {
     }
   `;
 
-  return safeRequest("getPostBySlug", null, async () => {
+  const post = await safeRequest("getPostBySlug", null, async () => {
     const response = await client.request<GetPostBySlugResponse>(query, {
       publicationId,
       slug,
     });
     return response.publication?.post ?? null;
   });
+
+  return post ?? getRssPostBySlug(slug);
 }
 
 export async function subscribeToNewsletter(email: string) {
