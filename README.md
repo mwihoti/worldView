@@ -18,6 +18,41 @@ A headless news blog powered by [Hashnode](https://hashnode.com)'s GraphQL API a
 - Loading skeletons, error and not-found states
 - Newsletter signup dialog wired to Hashnode's subscribe mutation
 
+## Writing articles — the admin panel
+
+The site embeds [Payload CMS](https://payloadcms.com): a full admin panel at
+**`/admin`** with user accounts, drafts/publishing, a media library, and a rich
+text editor. Articles published there appear on the site within ~5 minutes.
+
+**AI drafting:** every post has an "AI prompt" field and a "Draft with AI on
+save" checkbox. Describe the article you want, tick the box, save — Claude
+writes a complete draft into the editor, which you can then edit and publish.
+Requires `ANTHROPIC_API_KEY` on the server.
+
+### Local development
+
+Works out of the box: the CMS uses a local SQLite file (`worldview.db`).
+Run `npm run dev`, open `http://localhost:3000/admin`, and create the first
+admin user.
+
+### Production (Vercel + Neon)
+
+1. Create a free Postgres database at [neon.tech](https://neon.tech) and copy
+   its connection string.
+2. In Vercel, add the env vars: `DATABASE_URI` (the Neon string),
+   `PAYLOAD_SECRET` (`openssl rand -hex 32`), and optionally
+   `ANTHROPIC_API_KEY` for AI drafting.
+3. One-time schema setup: run the dev server locally against the production
+   database once — `DATABASE_URI=postgres://... npm run dev` — Payload pushes
+   the schema automatically in dev mode. Then redeploy.
+4. Uploaded images are stored on the server filesystem, which is ephemeral on
+   Vercel — for durable media either use externally hosted image URLs or add
+   the `@payloadcms/storage-vercel-blob` adapter.
+
+The public site never depends on the CMS being up: if the database is missing
+or unreachable, CMS posts are simply omitted and the rest of the content
+(Hashnode + restored posts) still renders.
+
 ## Getting started
 
 ```bash
