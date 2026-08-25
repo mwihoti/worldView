@@ -15,7 +15,7 @@ export default function ThemeToggler() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="outline-none">
+      <DropdownMenuTrigger className="outline-hidden">
         {resolvedTheme === "light" ? <SunIcon /> : <MoonIcon />}
       </DropdownMenuTrigger>
 

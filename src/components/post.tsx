@@ -117,7 +117,7 @@ export default function Post({ slug }: Props) {
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Add a comment..."
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              className="flex-1 px-4 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
             />
             <button
               onClick={handleAddComment}
@@ -133,7 +133,7 @@ export default function Post({ slug }: Props) {
               <p className="text-gray-500">No comments yet. Be the first to comment!</p>
             ) : (
               comments.map((comment, index) => (
-                <li key={index} className="bg-gray-100 p-4 rounded-lg shadow">
+                <li key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
                   {comment}
                 </li>
               ))

@@ -30,7 +30,7 @@ export default function Navbar() {
         {/* Menu Button (Mobile) */}
         <button
           onClick={toggleMenu}
-          className="lg:hidden text-2xl text-gray-700 focus:outline-none"
+          className="lg:hidden text-2xl text-gray-700 focus:outline-hidden"
         >
           <FontAwesomeIcon icon={menuOpen ? faTimes : faBars} />
         </button>
