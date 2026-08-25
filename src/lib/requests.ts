@@ -1,80 +1,158 @@
-import request, { gql } from "graphql-request";
+import { GraphQLClient, gql } from "graphql-request";
 import { env } from "./env";
-import { PageProps } from '../../.next/types/app/page';
 import {
-  GetPostsArgs,
-  GetPostsResponse,
-  SubscribeToNewsletterResponse,
-  PublicationName,
+  FullPost,
   GetPostBySlugResponse,
-  PostsResponse,
+  GetPostsResponse,
+  GetPublicationResponse,
+  PostsPage,
+  Publication,
+  SubscribeToNewsletterResponse,
 } from "./types";
 
-const endpoint = env.NEXT_PUBLIC_HASHNODE_ENDPOINT;
+const client = new GraphQLClient(env.NEXT_PUBLIC_HASHNODE_ENDPOINT);
 const publicationId = env.NEXT_PUBLIC_HASHNODE_PUBLICATION_ID;
 
-export async function getBlogName() {
+/*
+ * As of May 2026 Hashnode's GraphQL API requires a paid Pro plan; requests
+ * from non-allow-listed publications get redirected to an HTML announcement
+ * page. Fall back to empty data instead of failing the whole page/build so
+ * the site keeps working (with empty states) until access is restored.
+ */
+async function safeRequest<T>(
+  label: string,
+  fallback: T,
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Hashnode request "${label}" failed: ${message.slice(0, 200)}`);
+    return fallback;
+  }
+}
+
+const POST_FIELDS = gql`
+  fragment PostFields on Post {
+    id
+    title
+    subtitle
+    slug
+    brief
+    publishedAt
+    coverImage {
+      url
+    }
+    author {
+      name
+      profilePicture
+    }
+  }
+`;
+
+export async function getPublication(): Promise<Publication> {
   const query = gql`
-    query getBlogName($publicationId: ObjectId!) {
+    query getPublication($publicationId: ObjectId!) {
       publication(id: $publicationId) {
         title
         displayTitle
         favicon
+        descriptionSEO
       }
     }
   `;
 
-  const response = await request<PublicationName>(endpoint, query, {
-    publicationId,
-  });
+  const fallback: Publication = { title: "WorldView", displayTitle: "WorldView" };
 
-  return {
-    title: response.publication.title,
-    displayTitle: response.publication.displayTitle,
-    favicon: response.publication.favicon,
-  };
+  return safeRequest("getPublication", fallback, async () => {
+    const response = await client.request<GetPublicationResponse>(query, {
+      publicationId,
+    });
+    return response.publication ?? fallback;
+  });
 }
 
-export async function getPosts({ author, first = 20, pageParam = "" }: GetPostsArgs) {
+export async function getPosts({
+  first = 12,
+  after = "",
+}: {
+  first?: number;
+  after?: string;
+} = {}): Promise<PostsPage> {
   const query = gql`
+    ${POST_FIELDS}
     query getPosts($publicationId: ObjectId!, $first: Int!, $after: String) {
       publication(id: $publicationId) {
-        posts(first: $first, 
-        after: $after
-        ) {
+        posts(first: $first, after: $after) {
           edges {
-    
             node {
-              id
-              title
-              subtitle
-              slug
-              content {
-                text
-              }
-              coverImage {
-                url
-              }
-              author {
-                name
-                profilePicture
-              }
+              ...PostFields
             }
             cursor
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }
     }
   `;
 
-  const response = await request<GetPostsResponse>(endpoint, query, {
-    publicationId,
-    first,
-    after: pageParam
-    
-  });
+  const fallback: PostsPage = {
+    edges: [],
+    pageInfo: { hasNextPage: false, endCursor: null },
+  };
 
-  return response.publication.posts.edges;
+  return safeRequest("getPosts", fallback, async () => {
+    const response = await client.request<GetPostsResponse>(query, {
+      publicationId,
+      first,
+      after: after || null,
+    });
+    return response.publication?.posts ?? fallback;
+  });
+}
+
+/*
+ * Hashnode's public API can't filter a publication's posts by author name,
+ * so fetch a large page and filter here on the server.
+ */
+export async function getPostsByAuthor(author: string): Promise<PostsPage> {
+  const { edges } = await getPosts({ first: 50 });
+  const needle = author.toLowerCase();
+
+  return {
+    edges: edges.filter((edge) =>
+      edge.node.author.name.toLowerCase().includes(needle)
+    ),
+    pageInfo: { hasNextPage: false, endCursor: null },
+  };
+}
+
+export async function getPostBySlug(slug: string): Promise<FullPost | null> {
+  const query = gql`
+    ${POST_FIELDS}
+    query getPostBySlug($publicationId: ObjectId!, $slug: String!) {
+      publication(id: $publicationId) {
+        post(slug: $slug) {
+          ...PostFields
+          content {
+            html
+          }
+        }
+      }
+    }
+  `;
+
+  return safeRequest("getPostBySlug", null, async () => {
+    const response = await client.request<GetPostBySlugResponse>(query, {
+      publicationId,
+      slug,
+    });
+    return response.publication?.post ?? null;
+  });
 }
 
 export async function subscribeToNewsletter(email: string) {
@@ -88,82 +166,8 @@ export async function subscribeToNewsletter(email: string) {
     }
   `;
 
-  const response = await request<SubscribeToNewsletterResponse>(
-    endpoint,
-    mutation,
-    {
-      publicationId,
-      email,
-    }
-  );
-
-  return response;
-}
-
-export async function getPostBySlug(slug: string) {
-  const query = gql`
-    query getPostBySlug($publicationId: ObjectId!, $slug: String!) {
-      publication(id: $publicationId) {
-        post(slug: $slug) {
-          title
-          subtitle
-          coverImage {
-            url
-          }
-          content {
-            html
-          }
-          author {
-            name
-            profilePicture
-          }
-        }
-      }
-    }
-  `;
-
-  const response = await request<GetPostBySlugResponse>(endpoint, query, {
+  return client.request<SubscribeToNewsletterResponse>(mutation, {
     publicationId,
-    slug,
+    email,
   });
-
-  return response.publication.post;
-}
-
-
-export async function getPostsByAuthor(authorName: string, pageParam: "") {
-  const query = gql`
-    query getPostsByAuthor($publicationId: ObjectId!, $authorName: String!, $after: String) {
-    publication(id: $publicationId) {
-      posts(filter: { author: { name: $authorName } 
-      first: 8,
-      after: $after}) {
-      edges {
-      node {
-      id
-      title
-      subtitle
-      slug
-      content {
-        text
-      }
-      coverImage {
-        url
-      }
-      author {
-        name
-        profilePicture
-      }}}}
-    }}
-  `;
-
-  const response = await request<PostsResponse>(endpoint, query, {
-    publicationId,
-    authorName,
-    after: pageParam,
-
-  });
-  return response.publication.posts.edges;
-
-
 }
