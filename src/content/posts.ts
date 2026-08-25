@@ -15,12 +15,14 @@ export type LocalPost = {
   title: string;
   author: string;
   publishedAt: string;
+  cover?: string;
   markdown: string;
 };
 
 export const localPosts: LocalPost[] = [
   {
     slug: "what-is-fpl-fantasy-premier-league-and-why-you-should-be-playing",
+    cover: "/covers/what-is-fpl-fantasy-premier-league-and-why-you-should-be-playing.svg",
     title: "What is FPL (Fantasy Premier League) and Why You Should be Playing",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-14T08:00:00.000Z",
@@ -191,6 +193,7 @@ Join FPL communities, forums, and social media groups to discuss strategies, get
   },
   {
     slug: "key-premier-league-departures-so-far-this-transfer-window",
+    cover: "/covers/key-premier-league-departures-so-far-this-transfer-window.svg",
     title: "Key Premier League Departures So Far This Transfer Window",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-13T08:00:00.000Z",
@@ -262,6 +265,7 @@ Some honorable mentions that deserved to be on the above list include:
   },
   {
     slug: "confirmed-premier-league-transfers-updates",
+    cover: "/covers/confirmed-premier-league-transfers-updates.svg",
     title: "Confirmed premier League Transfers- Updates",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-12T08:00:00.000Z",
@@ -291,6 +295,7 @@ Man United has signed another defender from Byen Munich this summer in Noussair 
   },
   {
     slug: "2024-25-premier-league-predictions",
+    cover: "/covers/2024-25-premier-league-predictions.svg",
     title: "2024/25 Premier League Predictions",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-11T08:00:00.000Z",
@@ -347,6 +352,7 @@ Finally, here is how I have predicted the Premier League table will look at the 
   },
   {
     slug: "all-time-best-tv-shows",
+    cover: "/covers/all-time-best-tv-shows.svg",
     title: "All-time Best Tv-shows",
     author: "Danny Black",
     publishedAt: "2024-08-10T08:00:00.000Z",
@@ -402,6 +408,7 @@ These shows represent just a fraction of the best TV has to offer, but they are 
   },
   {
     slug: "all-premier-league-confirmed-transfers-part-2",
+    cover: "/covers/all-premier-league-confirmed-transfers-part-2.svg",
     title: "All Premier League Confirmed Transfers (Part 2)",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-09T08:00:00.000Z",
@@ -525,6 +532,7 @@ Wolves have the least clear outs this summer, with only two names on the outgoin
   },
   {
     slug: "all-confirmed-premier-league-2024-summer-transfers-part-1",
+    cover: "/covers/all-confirmed-premier-league-2024-summer-transfers-part-1.svg",
     title: "All Confirmed Premier League 2024 Summer Transfers (Part 1)",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-08T08:00:00.000Z",
@@ -660,6 +668,7 @@ Ipswich earned a well-deserved promotion to the Premier League after finishing s
   },
   {
     slug: "all-time-best-movies",
+    cover: "/covers/all-time-best-movies.svg",
     title: "All-time best movies",
     author: "Danny Black",
     publishedAt: "2024-08-07T08:00:00.000Z",
@@ -765,6 +774,7 @@ These films are celebrated not just for their artistic merit but also for their 
   },
   {
     slug: "how-to-find-freedom",
+    cover: "/covers/how-to-find-freedom.svg",
     title: "How to find freedom",
     author: "Dennis Wekesa",
     publishedAt: "2024-08-06T08:00:00.000Z",
@@ -772,6 +782,7 @@ These films are celebrated not just for their artistic merit but also for their 
   },
   {
     slug: "dummy-article",
+    cover: "/covers/dummy-article.svg",
     title: "Dummy Article",
     author: "Daniel Mwihoti",
     publishedAt: "2024-08-05T08:00:00.000Z",
