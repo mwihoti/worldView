@@ -58,7 +58,7 @@ export function SetupNotice() {
             <code style={styles.code}>DATABASE_URI</code> (the connection
             string) and <code style={styles.code}>PAYLOAD_SECRET</code> (any
             long random string). Optional:{" "}
-            <code style={styles.code}>ANTHROPIC_API_KEY</code> to enable
+            <code style={styles.code}>NVIDIA_API_KEY</code> to enable
             AI-drafted articles.
           </li>
           <li style={styles.step}>

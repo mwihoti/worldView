@@ -25,9 +25,11 @@ The site embeds [Payload CMS](https://payloadcms.com): a full admin panel at
 text editor. Articles published there appear on the site within ~5 minutes.
 
 **AI drafting:** every post has an "AI prompt" field and a "Draft with AI on
-save" checkbox. Describe the article you want, tick the box, save — Claude
+save" checkbox. Describe the article you want, tick the box, save — the AI
 writes a complete draft into the editor, which you can then edit and publish.
-Requires `ANTHROPIC_API_KEY` on the server.
+Uses the NVIDIA API ([build.nvidia.com](https://build.nvidia.com)): set
+`NVIDIA_API_KEY` on the server, and optionally `NVIDIA_MODEL` to pick a model
+(default `meta/llama-3.3-70b-instruct`).
 
 ### Local development
 
@@ -41,7 +43,7 @@ admin user.
    its connection string.
 2. In Vercel, add the env vars: `DATABASE_URI` (the Neon string),
    `PAYLOAD_SECRET` (`openssl rand -hex 32`), and optionally
-   `ANTHROPIC_API_KEY` for AI drafting.
+   `NVIDIA_API_KEY` for AI drafting.
 3. One-time schema setup: run the dev server locally against the production
    database once — `DATABASE_URI=postgres://... npm run dev` — Payload pushes
    the schema automatically in dev mode. Then redeploy.

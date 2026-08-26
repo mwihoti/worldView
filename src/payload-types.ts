@@ -120,7 +120,7 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Articles published here appear on the site within a few minutes. Fill in “AI prompt” and tick “Draft with AI” to have Claude write a first draft on save.
+ * Articles published here appear on the site within a few minutes. Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "posts".
