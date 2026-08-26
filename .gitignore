@@ -39,3 +39,4 @@ next-env.d.ts
 # payload local dev
 worldview.db
 /media
+.env
