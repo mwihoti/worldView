@@ -5,6 +5,7 @@ import type { ServerFunctionClient } from "payload";
 import { handleServerFunctions, RootLayout } from "@payloadcms/next/layouts";
 import React from "react";
 import { importMap } from "./admin/importMap.js";
+import { adminConfigured } from "./admin/setup-notice";
 
 type Args = {
   children: React.ReactNode;
@@ -19,10 +20,15 @@ const serverFunction: ServerFunctionClient = async function (args) {
   });
 };
 
-const Layout = ({ children }: Args) => (
-  <RootLayout config={config} importMap={importMap} serverFunction={serverFunction}>
-    {children}
-  </RootLayout>
-);
+const Layout = ({ children }: Args) =>
+  adminConfigured() ? (
+    <RootLayout config={config} importMap={importMap} serverFunction={serverFunction}>
+      {children}
+    </RootLayout>
+  ) : (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
 
 export default Layout;
