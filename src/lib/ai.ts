@@ -1,9 +1,16 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { APIError, type CollectionBeforeChangeHook } from "payload";
 import {
   convertMarkdownToLexical,
   editorConfigFactory,
 } from "@payloadcms/richtext-lexical";
+
+/*
+ * AI article drafting via the NVIDIA API (build.nvidia.com). The endpoint is
+ * OpenAI-compatible; set NVIDIA_API_KEY (starts with "nvapi-") and optionally
+ * NVIDIA_MODEL to pick a different model from the catalog.
+ */
+const NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
+const DEFAULT_MODEL = "meta/llama-3.3-70b-instruct";
 
 const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
@@ -14,42 +21,59 @@ Format your response exactly like this:
 - Then the article body in markdown, using ## subheadings, short paragraphs, and lists where they help.
 - No preamble, no commentary about the writing process — output only the article.`;
 
+type ChatCompletionResponse = {
+  choices?: {
+    message?: { content?: string };
+    finish_reason?: string;
+  }[];
+  error?: { message?: string };
+};
+
 export async function draftArticleMarkdown(
   prompt: string,
   existingTitle?: string
 ): Promise<{ title: string | null; markdown: string }> {
-  const client = new Anthropic();
-
   const brief = existingTitle
     ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
     : `Brief: ${prompt}`;
 
-  const stream = client.beta.messages.stream({
-    model: "claude-opus-5",
-    max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: brief }],
+  const response = await fetch(NVIDIA_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.NVIDIA_MODEL || DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: brief },
+      ],
+      max_tokens: 4096,
+      temperature: 0.7,
+    }),
+    signal: AbortSignal.timeout(120_000),
   });
 
-  const response = await stream.finalMessage();
-
-  if (response.stop_reason === "refusal") {
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = body.slice(0, 200);
+    try {
+      detail = (JSON.parse(body) as ChatCompletionResponse).error?.message ?? detail;
+    } catch {
+      /* keep raw text */
+    }
     throw new APIError(
-      "The AI declined to write this article. Try rephrasing the prompt.",
-      400
+      `The AI request failed (${response.status}): ${detail}`,
+      response.status === 401 ? 400 : 502
     );
   }
 
-  const text = response.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("")
-    .trim();
+  const data = (await response.json()) as ChatCompletionResponse;
+  const text = data.choices?.[0]?.message?.content?.trim() ?? "";
 
   if (!text) {
-    throw new APIError("The AI returned an empty draft. Try again.", 500);
+    throw new APIError("The AI returned an empty draft. Try again.", 502);
   }
 
   // First markdown heading becomes the title; the rest is the body.
@@ -78,9 +102,9 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({
       400
     );
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.NVIDIA_API_KEY) {
     throw new APIError(
-      "AI drafting is not configured: set ANTHROPIC_API_KEY on the server.",
+      "AI drafting is not configured: set NVIDIA_API_KEY on the server.",
       400
     );
   }

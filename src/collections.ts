@@ -36,7 +36,7 @@ export const Posts: CollectionConfig = {
     defaultColumns: ["title", "author", "_status", "publishedAt"],
     description:
       "Articles published here appear on the site within a few minutes. " +
-      "Fill in “AI prompt” and tick “Draft with AI” to have Claude write a first draft on save.",
+      "Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save.",
   },
   versions: { drafts: true },
   access: { read: () => true },
