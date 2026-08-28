@@ -10,7 +10,9 @@ import {
  * NVIDIA_MODEL to pick a different model from the catalog.
  */
 const NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
-const DEFAULT_MODEL = "meta/llama-3.3-70b-instruct";
+// NVIDIA retires models regularly (list the current ones at
+// https://integrate.api.nvidia.com/v1/models); override with NVIDIA_MODEL.
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
@@ -59,18 +61,29 @@ export async function draftArticleMarkdown(
     const body = await response.text();
     let detail = body.slice(0, 200);
     try {
-      detail = (JSON.parse(body) as ChatCompletionResponse).error?.message ?? detail;
+      const parsed = JSON.parse(body) as ChatCompletionResponse & {
+        detail?: string;
+      };
+      detail = parsed.error?.message ?? parsed.detail ?? detail;
     } catch {
       /* keep raw text */
     }
+    const hint =
+      response.status === 404 || response.status === 410
+        ? " The model may have been retired — set NVIDIA_MODEL to a current one from https://integrate.api.nvidia.com/v1/models."
+        : "";
     throw new APIError(
-      `The AI request failed (${response.status}): ${detail}`,
+      `The AI request failed (${response.status}): ${detail}${hint}`,
       response.status === 401 ? 400 : 502
     );
   }
 
   const data = (await response.json()) as ChatCompletionResponse;
-  const text = data.choices?.[0]?.message?.content?.trim() ?? "";
+  // Reasoning models may wrap deliberation in <think> tags — keep only the
+  // final article text.
+  const text = (data.choices?.[0]?.message?.content ?? "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim();
 
   if (!text) {
     throw new APIError("The AI returned an empty draft. Try again.", 502);

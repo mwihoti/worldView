@@ -29,7 +29,7 @@ save" checkbox. Describe the article you want, tick the box, save — the AI
 writes a complete draft into the editor, which you can then edit and publish.
 Uses the NVIDIA API ([build.nvidia.com](https://build.nvidia.com)): set
 `NVIDIA_API_KEY` on the server, and optionally `NVIDIA_MODEL` to pick a model
-(default `meta/llama-3.3-70b-instruct`).
+(default `openai/gpt-oss-120b`).
 
 ### Local development
 
