@@ -5,6 +5,7 @@ import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { postgresAdapter } from "@payloadcms/db-postgres";
 import sharp from "sharp";
+import { vercelBlobStorage } from "@payloadcms/storage-vercel-blob";
 import { Media, Posts, Users } from "./collections";
 
 const filename = fileURLToPath(import.meta.url);
@@ -28,6 +29,18 @@ export default buildConfig({
   editor: lexicalEditor(),
   sharp,
   collections: [Posts, Media, Users],
+  /*
+   * Vercel's serverless filesystem is read-only, so uploads can't be written to
+   * staticDir. Route the media collection to Vercel Blob instead. The token is
+   * injected automatically when a Blob store is attached to the project.
+   */
+  plugins: [
+    vercelBlobStorage({
+      collections: { media: true },
+      token: process.env.BLOB_READ_WRITE_TOKEN ?? "",
+      enabled: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    }),
+  ],
   admin: {
     user: "users",
     meta: {
