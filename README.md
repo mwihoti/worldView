@@ -47,9 +47,11 @@ admin user.
 3. One-time schema setup: run the dev server locally against the production
    database once — `DATABASE_URI=postgres://... npm run dev` — Payload pushes
    the schema automatically in dev mode. Then redeploy.
-4. Uploaded images are stored on the server filesystem, which is ephemeral on
-   Vercel — for durable media either use externally hosted image URLs or add
-   the `@payloadcms/storage-vercel-blob` adapter.
+4. Media uploads: Vercel's filesystem is read-only, so image uploads in the
+   admin fail with a 500 until a Blob store is connected. In Vercel go to
+   Storage → Create Database → Blob and connect it to the project; this sets
+   `BLOB_READ_WRITE_TOKEN` automatically. Redeploy and uploads are stored in
+   Vercel Blob (locally they still go to `./media`).
 
 The public site never depends on the CMS being up: if the database is missing
 or unreachable, CMS posts are simply omitted and the rest of the content
