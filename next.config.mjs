@@ -9,6 +9,11 @@ const nextConfig = {
         hostname: "cdn.hashnode.com",
         protocol: "https",
       },
+      // CMS media uploaded to Vercel Blob in production
+      {
+        hostname: "*.public.blob.vercel-storage.com",
+        protocol: "https",
+      },
     ],
     // Local cover images for the restored posts are SVGs (public/covers/)
     dangerouslyAllowSVG: true,
