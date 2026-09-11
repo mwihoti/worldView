@@ -48,10 +48,13 @@ admin user.
    database once — `DATABASE_URI=postgres://... npm run dev` — Payload pushes
    the schema automatically in dev mode. Then redeploy.
 4. Media uploads: Vercel's filesystem is read-only, so image uploads in the
-   admin fail with a 500 until a Blob store is connected. In Vercel go to
-   Storage → Create Database → Blob and connect it to the project; this sets
-   `BLOB_READ_WRITE_TOKEN` automatically. Redeploy and uploads are stored in
-   Vercel Blob (locally they still go to `./media`).
+   admin fail until a Blob store is connected. In Vercel go to Storage →
+   Create Database → Blob, choose **Public** access (the Payload adapter does
+   not support private stores, and cover images must be publicly readable),
+   and connect it to the project with **"Add a read-write token env var"**
+   ticked so `BLOB_READ_WRITE_TOKEN` is set. Redeploy and uploads are stored
+   in Vercel Blob (locally they still go to `./media`). If the token is
+   missing the admin shows a clear error on save instead of a generic 500.
 
 The public site never depends on the CMS being up: if the database is missing
 or unreachable, CMS posts are simply omitted and the rest of the content

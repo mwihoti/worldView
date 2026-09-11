@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { APIError } from "payload";
 import { draftWithAI } from "./lib/ai";
 
 export const Users: CollectionConfig = {
@@ -10,12 +11,36 @@ export const Users: CollectionConfig = {
   ],
 };
 
+/*
+ * On Vercel the filesystem is read-only, so uploads only work through the
+ * Vercel Blob adapter (see payload.config.ts). Without its token Payload
+ * falls back to local disk and the save dies with an opaque
+ * "Something went wrong" (ENOENT mkdir 'media' in the logs). Fail early
+ * with a message that says what to fix instead.
+ */
+const blobConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const uploadsUnavailableOnVercel = Boolean(process.env.VERCEL) && !blobConfigured;
+
 export const Media: CollectionConfig = {
   slug: "media",
   access: { read: () => true },
   upload: {
     staticDir: "media",
     mimeTypes: ["image/*"],
+  },
+  hooks: {
+    beforeOperation: [
+      ({ operation }) => {
+        if (uploadsUnavailableOnVercel && (operation === "create" || operation === "update")) {
+          throw new APIError(
+            "Media uploads are not configured: BLOB_READ_WRITE_TOKEN is missing. " +
+              "In Vercel, connect a *public* Blob store to this project with the " +
+              "read-write token option enabled, then redeploy.",
+            503,
+          );
+        }
+      },
+    ],
   },
   fields: [
     { name: "alt", type: "text" },
