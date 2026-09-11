@@ -4,8 +4,8 @@ import { buildConfig } from "payload";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { postgresAdapter } from "@payloadcms/db-postgres";
-import { vercelBlobStorage } from "@payloadcms/storage-vercel-blob";
 import sharp from "sharp";
+import { vercelBlobStorage } from "@payloadcms/storage-vercel-blob";
 import { Media, Posts, Users } from "./collections";
 
 const filename = fileURLToPath(import.meta.url);
@@ -24,10 +24,10 @@ const db = process.env.DATABASE_URI?.startsWith("postgres")
     });
 
 /*
- * Vercel's filesystem is read-only, so uploads to the local "media" folder
- * fail there with a 500. When a Vercel Blob store is connected to the
- * project (which sets BLOB_READ_WRITE_TOKEN), store media in Blob instead.
- * Local dev keeps writing to ./media.
+ * Vercel's serverless filesystem is read-only, so uploads can't be written to
+ * staticDir. Route the media collection to Vercel Blob instead. The token is
+ * injected automatically when a Blob store is attached to the project; local
+ * dev keeps writing to ./media.
  */
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
@@ -39,9 +39,9 @@ export default buildConfig({
   collections: [Posts, Media, Users],
   plugins: [
     vercelBlobStorage({
-      enabled: Boolean(blobToken),
-      token: blobToken,
       collections: { media: true },
+      token: blobToken ?? "",
+      enabled: Boolean(blobToken),
       // Vercel serverless functions cap request bodies at 4.5MB; upload from
       // the browser straight to Blob so larger images work too.
       clientUploads: true,
