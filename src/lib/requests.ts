@@ -13,8 +13,22 @@ import {
   SubscribeToNewsletterResponse,
 } from "./types";
 
-const client = new GraphQLClient(env.NEXT_PUBLIC_HASHNODE_ENDPOINT);
-const publicationId = env.NEXT_PUBLIC_HASHNODE_PUBLICATION_ID;
+/*
+ * Hashnode is optional: its GraphQL API is Pro-only now and the site already
+ * falls back to RSS / local / Payload posts. Constructing GraphQLClient with an
+ * undefined endpoint throws at import time, which took down every route that
+ * imports this module (including robots.txt) when the env vars were blank.
+ */
+const client = env.NEXT_PUBLIC_HASHNODE_ENDPOINT
+  ? new GraphQLClient(env.NEXT_PUBLIC_HASHNODE_ENDPOINT)
+  : null;
+const publicationId = env.NEXT_PUBLIC_HASHNODE_PUBLICATION_ID ?? "";
+
+/** The client, or a throw that safeRequest turns into the caller's fallback. */
+function hashnode(): GraphQLClient {
+  if (!client) throw new Error("Hashnode is not configured on this deployment");
+  return client;
+}
 
 /*
  * As of May 2026 Hashnode's GraphQL API requires a paid Pro plan; requests
@@ -69,7 +83,7 @@ export async function getPublication(): Promise<Publication> {
   const fallback: Publication = { title: "WorldView", displayTitle: "WorldView" };
 
   return safeRequest("getPublication", fallback, async () => {
-    const response = await client.request<GetPublicationResponse>(query, {
+    const response = await hashnode().request<GetPublicationResponse>(query, {
       publicationId,
     });
     return response.publication ?? fallback;
@@ -109,7 +123,7 @@ export async function getPosts({
   };
 
   let page = await safeRequest("getPosts", fallback, async () => {
-    const response = await client.request<GetPostsResponse>(query, {
+    const response = await hashnode().request<GetPostsResponse>(query, {
       publicationId,
       first,
       after: after || null,
@@ -175,7 +189,7 @@ export async function getPostBySlug(slug: string): Promise<FullPost | null> {
   `;
 
   const post = await safeRequest("getPostBySlug", null, async () => {
-    const response = await client.request<GetPostBySlugResponse>(query, {
+    const response = await hashnode().request<GetPostBySlugResponse>(query, {
       publicationId,
       slug,
     });
@@ -201,7 +215,7 @@ export async function subscribeToNewsletter(email: string) {
     }
   `;
 
-  return client.request<SubscribeToNewsletterResponse>(mutation, {
+  return hashnode().request<SubscribeToNewsletterResponse>(mutation, {
     publicationId,
     email,
   });
