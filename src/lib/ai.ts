@@ -3,6 +3,7 @@ import {
   convertMarkdownToLexical,
   editorConfigFactory,
 } from "@payloadcms/richtext-lexical";
+import { expandBriefWithSources } from "./brief-sources";
 
 /*
  * AI article drafting via the NVIDIA API (build.nvidia.com). The endpoint is
@@ -10,9 +11,27 @@ import {
  * NVIDIA_MODEL to pick a different model from the catalog.
  */
 const NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
-// NVIDIA retires models regularly (list the current ones at
-// https://integrate.api.nvidia.com/v1/models); override with NVIDIA_MODEL.
-const DEFAULT_MODEL = "openai/gpt-oss-120b";
+// NVIDIA retires models regularly (openai/gpt-oss-120b went end-of-life on
+// 2026-09-03). List the current catalog at
+// https://integrate.api.nvidia.com/v1/models. NVIDIA_MODEL is tried first;
+// when a model answers 404/410 (retired) the next one in this list is tried.
+const FALLBACK_MODELS = [
+  "openai/gpt-oss-20b",
+  "nvidia/nemotron-3-super-120b-a12b",
+  "moonshotai/kimi-k3",
+  "deepseek-ai/deepseek-v4-flash-0731",
+];
+
+function candidateModels(): string[] {
+  const preferred = process.env.NVIDIA_MODEL?.trim();
+  return preferred
+    ? [preferred, ...FALLBACK_MODELS.filter((m) => m !== preferred)]
+    : FALLBACK_MODELS;
+}
+
+function isRetiredModelStatus(status: number): boolean {
+  return status === 404 || status === 410;
+}
 
 const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
@@ -31,22 +50,18 @@ type ChatCompletionResponse = {
   error?: { message?: string };
 };
 
-export async function draftArticleMarkdown(
-  prompt: string,
-  existingTitle?: string
-): Promise<{ title: string | null; markdown: string }> {
-  const brief = existingTitle
-    ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
-    : `Brief: ${prompt}`;
-
-  const response = await fetch(NVIDIA_ENDPOINT, {
+async function requestCompletion(
+  model: string,
+  brief: string
+): Promise<Response> {
+  return fetch(NVIDIA_ENDPOINT, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.NVIDIA_MODEL || DEFAULT_MODEL,
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: brief },
@@ -56,25 +71,54 @@ export async function draftArticleMarkdown(
     }),
     signal: AbortSignal.timeout(120_000),
   });
+}
 
-  if (!response.ok) {
-    const body = await response.text();
-    let detail = body.slice(0, 200);
-    try {
-      const parsed = JSON.parse(body) as ChatCompletionResponse & {
-        detail?: string;
-      };
-      detail = parsed.error?.message ?? parsed.detail ?? detail;
-    } catch {
-      /* keep raw text */
+async function errorDetail(response: Response): Promise<string> {
+  const body = await response.text();
+  try {
+    const parsed = JSON.parse(body) as ChatCompletionResponse & {
+      detail?: string;
+    };
+    return parsed.error?.message ?? parsed.detail ?? body.slice(0, 200);
+  } catch {
+    return body.slice(0, 200);
+  }
+}
+
+export async function draftArticleMarkdown(
+  prompt: string,
+  existingTitle?: string
+): Promise<{ title: string | null; markdown: string }> {
+  const rawBrief = existingTitle
+    ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
+    : `Brief: ${prompt}`;
+  // Pull in the text of any pages the brief links to; the model can't browse.
+  const brief = await expandBriefWithSources(rawBrief);
+
+  const models = candidateModels();
+  const retired: string[] = [];
+  let response: Response | undefined;
+
+  for (const model of models) {
+    response = await requestCompletion(model, brief);
+    if (response.ok || !isRetiredModelStatus(response.status)) break;
+    retired.push(`${model} (${response.status}: ${await errorDetail(response)})`);
+  }
+
+  if (!response || !response.ok) {
+    if (response && isRetiredModelStatus(response.status)) {
+      throw new APIError(
+        `The AI request failed: none of the configured models are available. ` +
+          `Tried ${retired.join("; ")}. Set NVIDIA_MODEL to a current one from ` +
+          `https://integrate.api.nvidia.com/v1/models.`,
+        502
+      );
     }
-    const hint =
-      response.status === 404 || response.status === 410
-        ? " The model may have been retired — set NVIDIA_MODEL to a current one from https://integrate.api.nvidia.com/v1/models."
-        : "";
+    const status = response?.status ?? 502;
+    const detail = response ? await errorDetail(response) : "no response";
     throw new APIError(
-      `The AI request failed (${response.status}): ${detail}${hint}`,
-      response.status === 401 ? 400 : 502
+      `The AI request failed (${status}): ${detail}`,
+      status === 401 ? 400 : 502
     );
   }
 
