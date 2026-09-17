@@ -52,7 +52,10 @@ admin user.
    Create an app there, copy its token, and add `UPLOADTHING_TOKEN` to the
    Vercel project for Production and Preview. Redeploy. Locally uploads still
    go to `./media`. If the token is missing the admin shows a clear error on
-   save instead of a generic 500.
+   save instead of a generic 500. The adapter adds two columns to the media
+   table, so after enabling it repeat the schema push from step 3 (run
+   `npm run dev` once against the production `DATABASE_URI`); otherwise
+   uploads fail with `column "_key" does not exist`.
 
 The public site never depends on the CMS being up: if the database is missing
 or unreachable, CMS posts are simply omitted and the rest of the content

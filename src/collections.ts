@@ -44,6 +44,33 @@ export const Media: CollectionConfig = {
   },
   fields: [
     { name: "alt", type: "text" },
+    /*
+     * When the UploadThing adapter is active it adds hidden "prefix" and
+     * "_key" fields. Define the same fields when it is disabled (local dev)
+     * so the schema is identical everywhere; otherwise pushing the schema
+     * from a local dev server leaves production without these columns and
+     * uploads fail with 'column "_key" does not exist'.
+     */
+    ...(storageConfigured
+      ? []
+      : ([
+          {
+            name: "prefix",
+            type: "text",
+            defaultValue: "",
+            admin: { hidden: true, readOnly: true },
+          },
+          {
+            name: "_key",
+            type: "text",
+            admin: {
+              hidden: true,
+              disableBulkEdit: true,
+              disableListColumn: true,
+              disableListFilter: true,
+            },
+          },
+        ] satisfies CollectionConfig["fields"])),
   ],
 };
 
