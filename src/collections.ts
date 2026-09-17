@@ -1,6 +1,7 @@
 import type { CollectionConfig } from "payload";
 import { APIError } from "payload";
 import { draftWithAI } from "./lib/ai";
+import { revalidateSite } from "./lib/revalidate";
 
 export const Users: CollectionConfig = {
   slug: "users",
@@ -44,6 +45,12 @@ export const Media: CollectionConfig = {
           data._key = ctx.key;
         }
         return data;
+      },
+    ],
+    afterChange: [
+      ({ doc }) => {
+        revalidateSite();
+        return doc;
       },
     ],
     beforeOperation: [
@@ -172,5 +179,19 @@ export const Posts: CollectionConfig = {
   ],
   hooks: {
     beforeChange: [draftWithAI],
+    // Make the change visible on the site right away instead of after the
+    // 5-minute static cache expires.
+    afterChange: [
+      ({ doc, previousDoc }) => {
+        revalidateSite([doc?.slug, previousDoc?.slug]);
+        return doc;
+      },
+    ],
+    afterDelete: [
+      ({ doc }) => {
+        revalidateSite([doc?.slug]);
+        return doc;
+      },
+    ],
   },
 };
