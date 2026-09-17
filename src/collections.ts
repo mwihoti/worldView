@@ -29,6 +29,23 @@ export const Media: CollectionConfig = {
     mimeTypes: ["image/*"],
   },
   hooks: {
+    beforeChange: [
+      /*
+       * With clientUploads the browser sends the file straight to UploadThing
+       * and only its key reaches the server (req.file.clientUploadContext).
+       * The storage plugin skips handleUpload for such files, so nothing
+       * writes that key to the document and the file can never be served
+       * (docs ended up with _key null and /api/media/file/... 404). Record
+       * it here.
+       */
+      ({ data, req }) => {
+        const ctx = req.file?.clientUploadContext;
+        if (ctx && typeof ctx === "object" && "key" in ctx && typeof ctx.key === "string") {
+          data._key = ctx.key;
+        }
+        return data;
+      },
+    ],
     beforeOperation: [
       ({ operation }) => {
         if (uploadsUnavailableOnVercel && (operation === "create" || operation === "update")) {
