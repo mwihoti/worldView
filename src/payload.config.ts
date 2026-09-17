@@ -3,7 +3,7 @@ import { fileURLToPath } from "url";
 import { buildConfig } from "payload";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
-import { postgresAdapter } from "@payloadcms/db-postgres";
+import { postgresAdapter, sql, type PostgresAdapter } from "@payloadcms/db-postgres";
 import sharp from "sharp";
 import { uploadthingStorage } from "@payloadcms/storage-uploadthing";
 import { Media, Posts, Users } from "./collections";
@@ -31,7 +31,32 @@ const db = process.env.DATABASE_URI?.startsWith("postgres")
  */
 const uploadthingToken = process.env.UPLOADTHING_TOKEN;
 
+/*
+ * Production runs on Postgres where the schema is only ever updated by hand
+ * (Payload pushes schema changes automatically in dev only). The UploadThing
+ * adapter added two hidden columns to "media"; until they exist every upload
+ * fails with 'column "_key" does not exist'. Add them idempotently on
+ * startup so a deploy is all that's needed. Safe to remove once the columns
+ * are known to exist everywhere.
+ */
+const ensureMediaStorageColumns: NonNullable<Parameters<typeof buildConfig>[0]["onInit"]> =
+  async (payload) => {
+    if (payload.db.name !== "postgres") return;
+    const { drizzle } = payload.db as unknown as PostgresAdapter;
+    try {
+      await drizzle.execute(
+        sql`ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "prefix" varchar DEFAULT ''`
+      );
+      await drizzle.execute(
+        sql`ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "_key" varchar`
+      );
+    } catch (error) {
+      payload.logger.error({ err: error, msg: "Could not ensure media storage columns" });
+    }
+  };
+
 export default buildConfig({
+  onInit: ensureMediaStorageColumns,
   secret: process.env.PAYLOAD_SECRET || "worldview-dev-secret-change-me",
   db,
   editor: lexicalEditor(),
