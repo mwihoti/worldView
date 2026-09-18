@@ -10,7 +10,10 @@ import { expandBriefWithSources } from "./brief-sources";
  * OpenAI-compatible; set NVIDIA_API_KEY (starts with "nvapi-") and optionally
  * NVIDIA_MODEL to pick a different model from the catalog.
  */
-const NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
+// NVIDIA_ENDPOINT can point at any OpenAI-compatible server (used by tests).
+const NVIDIA_ENDPOINT =
+  process.env.NVIDIA_ENDPOINT ||
+  "https://integrate.api.nvidia.com/v1/chat/completions";
 // NVIDIA retires models regularly (openai/gpt-oss-120b went end-of-life on
 // 2026-09-03). List the current catalog at
 // https://integrate.api.nvidia.com/v1/models. NVIDIA_MODEL is tried first;
@@ -50,9 +53,15 @@ type ChatCompletionResponse = {
   error?: { message?: string };
 };
 
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
 async function requestCompletion(
   model: string,
-  brief: string
+  messages: ChatMessage[],
+  maxTokens: number
 ): Promise<Response> {
   return fetch(NVIDIA_ENDPOINT, {
     method: "POST",
@@ -62,11 +71,8 @@ async function requestCompletion(
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: brief },
-      ],
-      max_tokens: 4096,
+      messages,
+      max_tokens: maxTokens,
       temperature: 0.7,
     }),
     signal: AbortSignal.timeout(120_000),
@@ -85,22 +91,28 @@ async function errorDetail(response: Response): Promise<string> {
   }
 }
 
-export async function draftArticleMarkdown(
-  prompt: string,
-  existingTitle?: string
-): Promise<{ title: string | null; markdown: string }> {
-  const rawBrief = existingTitle
-    ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
-    : `Brief: ${prompt}`;
-  // Pull in the text of any pages the brief links to; the model can't browse.
-  const brief = await expandBriefWithSources(rawBrief);
+/*
+ * One chat completion against the NVIDIA API, trying the configured model
+ * first and falling back through FALLBACK_MODELS when a model has been
+ * retired (404/410). Returns the assistant text with any <think> block
+ * stripped. Throws an APIError with a user-readable message otherwise.
+ */
+export async function chatCompletion(
+  messages: ChatMessage[],
+  { maxTokens = 4096 }: { maxTokens?: number } = {}
+): Promise<string> {
+  if (!process.env.NVIDIA_API_KEY) {
+    throw new APIError(
+      "AI is not configured: set NVIDIA_API_KEY on the server.",
+      400
+    );
+  }
 
-  const models = candidateModels();
   const retired: string[] = [];
   let response: Response | undefined;
 
-  for (const model of models) {
-    response = await requestCompletion(model, brief);
+  for (const model of candidateModels()) {
+    response = await requestCompletion(model, messages, maxTokens);
     if (response.ok || !isRetiredModelStatus(response.status)) break;
     retired.push(`${model} (${response.status}: ${await errorDetail(response)})`);
   }
@@ -124,21 +136,43 @@ export async function draftArticleMarkdown(
 
   const data = (await response.json()) as ChatCompletionResponse;
   // Reasoning models may wrap deliberation in <think> tags — keep only the
-  // final article text.
-  const text = (data.choices?.[0]?.message?.content ?? "")
+  // final text.
+  return (data.choices?.[0]?.message?.content ?? "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .trim();
+}
+
+export async function draftArticleMarkdown(
+  prompt: string,
+  existingTitle?: string
+): Promise<{ title: string | null; markdown: string }> {
+  const rawBrief = existingTitle
+    ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
+    : `Brief: ${prompt}`;
+  // Pull in the text of any pages the brief links to; the model can't browse.
+  const brief = await expandBriefWithSources(rawBrief);
+
+  const text = await chatCompletion([
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: brief },
+  ]);
 
   if (!text) {
     throw new APIError("The AI returned an empty draft. Try again.", 502);
   }
+  return splitTitle(text);
+}
 
-  // First markdown heading becomes the title; the rest is the body.
-  const match = text.match(/^#\s+(.+)\n+([\s\S]*)$/);
+/* First markdown heading becomes the title; the rest is the body. */
+export function splitTitle(markdown: string): {
+  title: string | null;
+  markdown: string;
+} {
+  const match = markdown.trim().match(/^#\s+(.+)\n+([\s\S]*)$/);
   if (match) {
     return { title: match[1].trim(), markdown: match[2].trim() };
   }
-  return { title: null, markdown: text };
+  return { title: null, markdown: markdown.trim() };
 }
 
 /*
@@ -159,13 +193,6 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({
       400
     );
   }
-  if (!process.env.NVIDIA_API_KEY) {
-    throw new APIError(
-      "AI drafting is not configured: set NVIDIA_API_KEY on the server.",
-      400
-    );
-  }
-
   const existingTitle =
     typeof data.title === "string" && data.title.trim()
       ? data.title.trim()

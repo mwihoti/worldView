@@ -2,6 +2,7 @@ import type { CollectionConfig } from "payload";
 import { APIError } from "payload";
 import { draftWithAI } from "./lib/ai";
 import { revalidateSite } from "./lib/revalidate";
+import { aiAssistantHandler } from "./lib/ai-assistant";
 
 export const Users: CollectionConfig = {
   slug: "users",
@@ -111,8 +112,9 @@ export const Posts: CollectionConfig = {
     useAsTitle: "title",
     defaultColumns: ["title", "author", "_status", "publishedAt"],
     description:
-      "Articles published here appear on the site within a few minutes. " +
-      "Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save.",
+      "Articles published here appear on the site right away. " +
+      "Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save, " +
+      "then use the AI assistant below the content to request corrections before publishing.",
   },
   versions: { drafts: true },
   access: { read: () => true },
@@ -176,7 +178,18 @@ export const Posts: CollectionConfig = {
       },
     },
     { name: "content", type: "richText" },
+    {
+      name: "aiAssistant",
+      type: "ui",
+      admin: {
+        components: {
+          Field: "/components/admin/AIAssistant#AIAssistant",
+        },
+      },
+    },
   ],
+  // POST /api/posts/ai-chat — conversational editing used by the panel above.
+  endpoints: [{ path: "/ai-chat", method: "post", handler: aiAssistantHandler }],
   hooks: {
     beforeChange: [draftWithAI],
     // Make the change visible on the site right away instead of after the
