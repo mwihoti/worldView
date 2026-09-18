@@ -45,6 +45,16 @@ writes a complete draft into the editor, which you can then edit and publish.
   `maxDuration = 60`, the ceiling on Vercel's Hobby plan; without it saves
   time out after 10 s with a 504.
 
+**AI assistant (chat):** below the content editor every post has an "AI
+assistant" panel. Chat with the model about the current draft — "fix the
+typos", "make the second section shorter", "rewrite the headline", or ask a
+question about it. Whenever it proposes changes it returns the complete
+revised article; use **Preview** to read it and **Apply to editor** to replace
+the editor content (and the title, if empty). Nothing is saved until you click
+Save Draft or Publish, so you stay in control of what goes live. The panel
+talks to `POST /api/posts/ai-chat` (logged-in admins only) and uses the same
+model configuration as drafting.
+
 **Media:** cover images are uploaded through the admin. Locally they land in
 `./media`; in production they are stored in [UploadThing](https://uploadthing.com)
 and served straight from its CDN (public URLs), so the site never proxies
@@ -150,6 +160,7 @@ stays off when unconfigured.
 | `UPLOADTHING_TOKEN` | Media storage in production (UploadThing) |
 | `NVIDIA_API_KEY` | Enables "Draft with AI" |
 | `NVIDIA_MODEL` | Optional model override for AI drafting |
+| `NVIDIA_ENDPOINT` | Optional OpenAI-compatible chat endpoint override (tests) |
 
 > [!IMPORTANT]
 > As of **May 2026**, Hashnode's GraphQL API [requires a paid Pro plan](https://hashnode.com/changelog/2026-05-13-graphql-api-paid-access)
