@@ -85,6 +85,8 @@ export default buildConfig({
   ],
   admin: {
     user: "users",
+    // Custom admin components are referenced by paths relative to this dir.
+    importMap: { baseDir: path.resolve(dirname) },
     meta: {
       titleSuffix: " · WorldView Admin",
     },
