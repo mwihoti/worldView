@@ -64,7 +64,15 @@ export default buildConfig({
   collections: [Posts, Media, Users],
   plugins: [
     uploadthingStorage({
-      collections: { media: true },
+      collections: {
+        media: {
+          // Serve files straight from UploadThing's CDN (public-read ACL)
+          // instead of proxying them through the serverless function. The
+          // proxy sent a Content-Length of 0 on Vercel, so images arrived
+          // empty; the media collection is publicly readable anyway.
+          disablePayloadAccessControl: true,
+        },
+      },
       enabled: Boolean(uploadthingToken),
       options: {
         token: uploadthingToken,
