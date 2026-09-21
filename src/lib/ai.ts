@@ -36,6 +36,25 @@ function isRetiredModelStatus(status: number): boolean {
   return status === 404 || status === 410;
 }
 
+// NVIDIA's hosted endpoints occasionally return a transient gateway error
+// ("Upstream request failed") when a model backend is cold or overloaded.
+// Treat these the same as a retired model: try the next one in the list
+// instead of failing the whole request on one flaky response.
+function isTransientStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+/*
+ * Vercel kills the whole function at 60s on the Hobby plan (no Fluid
+ * compute) regardless of what our own code does, and a hard kill produces
+ * a raw "Vercel Runtime Timeout Error" instead of a JSON response the UI
+ * can show. Keep enough of a margin to always finish with a clean APIError,
+ * and stop trying further fallback models once there isn't time left for
+ * another attempt plus the surrounding work (Lexical conversion, etc).
+ */
+const TOTAL_BUDGET_MS = 45_000;
+const MIN_ATTEMPT_MS = 8_000;
+
 const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
 Write a complete, publishable article based on the brief you are given. Ground the article in what the brief provides; do not invent quotes, statistics, or events the brief doesn't support — for topics that depend on very recent events, write from the brief alone and stay general where it is silent.
@@ -61,7 +80,8 @@ export type ChatMessage = {
 async function requestCompletion(
   model: string,
   messages: ChatMessage[],
-  maxTokens: number
+  maxTokens: number,
+  timeoutMs: number
 ): Promise<Response> {
   return fetch(NVIDIA_ENDPOINT, {
     method: "POST",
@@ -75,7 +95,7 @@ async function requestCompletion(
       max_tokens: maxTokens,
       temperature: 0.7,
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -108,21 +128,52 @@ export async function chatCompletion(
     );
   }
 
-  const retired: string[] = [];
+  const started = Date.now();
+  const attempts: string[] = [];
   let response: Response | undefined;
 
   for (const model of candidateModels()) {
-    response = await requestCompletion(model, messages, maxTokens);
-    if (response.ok || !isRetiredModelStatus(response.status)) break;
-    retired.push(`${model} (${response.status}: ${await errorDetail(response)})`);
+    const remaining = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (remaining < MIN_ATTEMPT_MS) {
+      // Not enough of our own budget left for another round trip — stop
+      // here instead of starting an attempt that would likely run into
+      // Vercel's hard function limit and produce a raw, unhandled timeout.
+      break;
+    }
+
+    try {
+      response = await requestCompletion(model, messages, maxTokens, remaining);
+    } catch (error) {
+      // Network error or our own abort firing (slow/unreachable backend).
+      const reason = error instanceof Error ? error.message : String(error);
+      attempts.push(`${model} (network error: ${reason})`);
+      response = undefined;
+      continue;
+    }
+
+    if (response.ok) break;
+    if (isRetiredModelStatus(response.status) || isTransientStatus(response.status)) {
+      attempts.push(`${model} (${response.status}: ${await errorDetail(response)})`);
+      continue;
+    }
+    // Any other error (bad request, auth, etc.) is not fixed by trying a
+    // different model — stop and surface it.
+    break;
   }
 
   if (!response || !response.ok) {
-    if (response && isRetiredModelStatus(response.status)) {
+    if (attempts.length > 0 && !response) {
       throw new APIError(
-        `The AI request failed: none of the configured models are available. ` +
-          `Tried ${retired.join("; ")}. Set NVIDIA_MODEL to a current one from ` +
-          `https://integrate.api.nvidia.com/v1/models.`,
+        `The AI request failed: none of the configured models responded in time. ` +
+          `Tried ${attempts.join("; ")}.`,
+        504
+      );
+    }
+    if (response && (isRetiredModelStatus(response.status) || isTransientStatus(response.status))) {
+      throw new APIError(
+        `The AI request failed: none of the configured models are available right now. ` +
+          `Tried ${attempts.join("; ")}. If this persists, set NVIDIA_MODEL to a current ` +
+          `one from https://integrate.api.nvidia.com/v1/models.`,
         502
       );
     }
