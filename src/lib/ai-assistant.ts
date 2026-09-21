@@ -116,7 +116,10 @@ export const aiAssistantHandler: PayloadHandler = async (req) => {
     ...messages.slice(-MAX_HISTORY),
   ];
 
-  const text = await chatCompletion(chat, { maxTokens: 6000 });
+  // Every turn regenerates the complete article, so keep this only as high
+  // as a typical post needs — a lower ceiling means a faster response and
+  // less risk of running into Vercel's 60s function limit.
+  const text = await chatCompletion(chat, { maxTokens: 3000 });
   if (!text) {
     throw new APIError("The AI returned an empty reply. Try again.", 502);
   }
