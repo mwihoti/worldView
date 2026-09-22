@@ -6,9 +6,18 @@ import {
 import { expandBriefWithSources } from "./brief-sources";
 
 /*
- * AI article drafting via the NVIDIA API (build.nvidia.com). The endpoint is
- * OpenAI-compatible; set NVIDIA_API_KEY (starts with "nvapi-") and optionally
- * NVIDIA_MODEL to pick a different model from the catalog.
+ * AI article drafting and the admin chat assistant, primarily via the
+ * NVIDIA API (build.nvidia.com, free). The endpoint is OpenAI-compatible;
+ * set NVIDIA_API_KEY (starts with "nvapi-") and optionally NVIDIA_MODEL to
+ * pick a different model from the catalog.
+ *
+ * Gemini (Google AI Studio, also free on the Flash tier) is a backstop: it
+ * is only tried when every NVIDIA attempt fails, since NVIDIA's community
+ * model catalog has proven flaky (models retired without notice, transient
+ * gateway errors, individual backends slow enough to exhaust the whole
+ * request budget). Set GEMINI_API_KEY to enable it; no code change needed
+ * to turn it off again — just remove the key. Both are optional; at least
+ * one must be set.
  */
 // NVIDIA_ENDPOINT can point at any OpenAI-compatible server (used by tests).
 const NVIDIA_ENDPOINT =
@@ -32,6 +41,13 @@ function candidateModels(): string[] {
     : FALLBACK_MODELS;
 }
 
+// Gemini's OpenAI-compatible endpoint (https://ai.google.dev/gemini-api/docs/openai).
+// GEMINI_ENDPOINT override exists for the same reason NVIDIA_ENDPOINT does: tests.
+const GEMINI_ENDPOINT =
+  process.env.GEMINI_ENDPOINT ||
+  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+
 function isRetiredModelStatus(status: number): boolean {
   return status === 404 || status === 410;
 }
@@ -51,8 +67,12 @@ function isTransientStatus(status: number): boolean {
  * can show. Keep enough of a margin to always finish with a clean APIError,
  * and stop trying further fallback models once there isn't time left for
  * another attempt plus the surrounding work (Lexical conversion, etc).
+ * Split the total budget between the NVIDIA phase and the Gemini backstop
+ * so one doesn't starve the other; NVIDIA gets more since it has more
+ * candidates to work through.
  */
-const TOTAL_BUDGET_MS = 45_000;
+const NVIDIA_BUDGET_MS = 30_000;
+const GEMINI_TIMEOUT_MS = 12_000;
 const MIN_ATTEMPT_MS = 8_000;
 /*
  * A single slow model can eat the whole budget before a second one ever
@@ -108,6 +128,8 @@ type ModelAttemptError = Error & {
 };
 
 async function attemptModel(
+  endpoint: string,
+  apiKey: string,
   model: string,
   messages: ChatMessage[],
   maxTokens: number,
@@ -115,10 +137,10 @@ async function attemptModel(
 ): Promise<{ model: string; response: Response }> {
   let response: Response;
   try {
-    response = await fetch(NVIDIA_ENDPOINT, {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -161,73 +183,111 @@ async function attemptModel(
  * any <think> block stripped; throws an APIError with a user-readable
  * message otherwise.
  */
+function extractText(data: ChatCompletionResponse): string {
+  // Reasoning models may wrap deliberation in <think> tags — keep only the
+  // final text.
+  return (data.choices?.[0]?.message?.content ?? "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim();
+}
+
 export async function chatCompletion(
   messages: ChatMessage[],
   { maxTokens = 4096 }: { maxTokens?: number } = {}
 ): Promise<string> {
-  if (!process.env.NVIDIA_API_KEY) {
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!nvidiaKey && !geminiKey) {
     throw new APIError(
-      "AI is not configured: set NVIDIA_API_KEY on the server.",
+      "AI is not configured: set NVIDIA_API_KEY (https://build.nvidia.com, free) " +
+        "and/or GEMINI_API_KEY (https://aistudio.google.com/apikey, free) on the server.",
       400
     );
   }
 
   const started = Date.now();
-  const candidates = candidateModels();
   const attempts: string[] = [];
 
-  for (let i = 0; i < candidates.length; i += RACE_SIZE) {
-    const remaining = TOTAL_BUDGET_MS - (Date.now() - started);
-    if (remaining < MIN_ATTEMPT_MS) break;
+  // Phase 1: race through the NVIDIA fallback list in small groups. A fatal
+  // error (bad request, bad key) stops this phase — trying another NVIDIA
+  // model wouldn't fix it — but still falls through to the Gemini backstop
+  // below rather than failing the whole request outright.
+  if (nvidiaKey) {
+    const candidates = candidateModels();
 
-    const group = candidates.slice(i, i + RACE_SIZE);
-    const controllers = group.map(() => new AbortController());
-    const timer = setTimeout(() => {
-      controllers.forEach((c) => c.abort());
-    }, remaining);
+    for (let i = 0; i < candidates.length; i += RACE_SIZE) {
+      const remaining = NVIDIA_BUDGET_MS - (Date.now() - started);
+      if (remaining < MIN_ATTEMPT_MS) break;
 
-    try {
-      const winner = await Promise.any(
-        group.map((model, idx) =>
-          attemptModel(model, messages, maxTokens, controllers[idx].signal)
-        )
-      );
-      // Cancel whichever sibling in this group is still in flight — but not
-      // the winner's own controller, which would abort the response body we
-      // are about to read.
-      controllers.forEach((c, idx) => {
-        if (group[idx] !== winner.model) c.abort();
-      });
+      const group = candidates.slice(i, i + RACE_SIZE);
+      const controllers = group.map(() => new AbortController());
+      const timer = setTimeout(() => {
+        controllers.forEach((c) => c.abort());
+      }, remaining);
 
-      const data = (await winner.response.json()) as ChatCompletionResponse;
-      // Reasoning models may wrap deliberation in <think> tags — keep only
-      // the final text.
-      return (data.choices?.[0]?.message?.content ?? "")
-        .replace(/<think>[\s\S]*?<\/think>/gi, "")
-        .trim();
-    } catch (error) {
-      if (error instanceof AggregateError) {
+      try {
+        const winner = await Promise.any(
+          group.map((model, idx) =>
+            attemptModel(
+              NVIDIA_ENDPOINT,
+              nvidiaKey,
+              model,
+              messages,
+              maxTokens,
+              controllers[idx].signal
+            )
+          )
+        );
+        // Cancel whichever sibling in this group is still in flight — but
+        // not the winner's own controller, which would abort the response
+        // body we are about to read.
+        controllers.forEach((c, idx) => {
+          if (group[idx] !== winner.model) c.abort();
+        });
+        return extractText((await winner.response.json()) as ChatCompletionResponse);
+      } catch (error) {
+        if (!(error instanceof AggregateError)) throw error;
         const errors = error.errors as ModelAttemptError[];
         const fatal = errors.find((e) => e.fatal);
-        if (fatal) {
-          throw new APIError(
-            `The AI request failed: ${fatal.message}`,
-            fatal.status === 401 ? 400 : 502
-          );
-        }
-        attempts.push(...errors.map((e) => e.message));
-        continue;
+        attempts.push(...(fatal ? [fatal.message] : errors.map((e) => e.message)));
+        if (fatal) break;
+      } finally {
+        clearTimeout(timer);
       }
-      throw error;
+    }
+  }
+
+  // Phase 2: Gemini backstop — a single attempt, only reached if NVIDIA
+  // wasn't configured or every NVIDIA attempt above failed.
+  if (geminiKey) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    try {
+      const { response } = await attemptModel(
+        GEMINI_ENDPOINT,
+        geminiKey,
+        GEMINI_MODEL,
+        messages,
+        maxTokens,
+        controller.signal
+      );
+      return extractText((await response.json()) as ChatCompletionResponse);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      attempts.push(reason);
     } finally {
       clearTimeout(timer);
     }
   }
 
   throw new APIError(
-    `The AI request failed: none of the configured models responded in time. ` +
-      `Tried ${attempts.join("; ")}. If this persists, set NVIDIA_MODEL to a current ` +
-      `one from https://integrate.api.nvidia.com/v1/models.`,
+    `The AI request failed: none of the configured models responded. ` +
+      `Tried ${attempts.join("; ")}.` +
+      (nvidiaKey
+        ? " If NVIDIA keeps failing, set NVIDIA_MODEL to a current one from " +
+          "https://integrate.api.nvidia.com/v1/models, or set GEMINI_API_KEY " +
+          "for a fallback provider."
+        : ""),
     504
   );
 }
