@@ -54,6 +54,15 @@ function isTransientStatus(status: number): boolean {
  */
 const TOTAL_BUDGET_MS = 45_000;
 const MIN_ATTEMPT_MS = 8_000;
+/*
+ * A single slow model can eat the whole budget before a second one ever
+ * gets a turn (seen in production: one attempt at 45s, nothing else
+ * tried). Race this many candidates at once instead of going one at a
+ * time — the fastest response wins and the rest are cancelled. Small on
+ * purpose: this is an occasional admin action, not high-volume traffic,
+ * and each attempt is a full completion request against the API quota.
+ */
+const RACE_SIZE = 2;
 
 const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
@@ -77,28 +86,6 @@ export type ChatMessage = {
   content: string;
 };
 
-async function requestCompletion(
-  model: string,
-  messages: ChatMessage[],
-  maxTokens: number,
-  timeoutMs: number
-): Promise<Response> {
-  return fetch(NVIDIA_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-}
-
 async function errorDetail(response: Response): Promise<string> {
   const body = await response.text();
   try {
@@ -111,11 +98,68 @@ async function errorDetail(response: Response): Promise<string> {
   }
 }
 
+type ModelAttemptError = Error & {
+  model: string;
+  status?: number;
+  // A fatal error (bad request, bad API key, ...) is not fixed by trying a
+  // different model. A retired (404/410) or transient (502/503/504) status,
+  // or a network/timeout failure, is — those keep the race going.
+  fatal?: boolean;
+};
+
+async function attemptModel(
+  model: string,
+  messages: ChatMessage[],
+  maxTokens: number,
+  signal: AbortSignal
+): Promise<{ model: string; response: Response }> {
+  let response: Response;
+  try {
+    response = await fetch(NVIDIA_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+      signal,
+    });
+  } catch (error) {
+    // Network error, or our own abort firing (slow/unreachable backend).
+    const reason = error instanceof Error ? error.message : String(error);
+    throw Object.assign(new Error(`${model} (network error: ${reason})`), {
+      model,
+    } satisfies Partial<ModelAttemptError>) as ModelAttemptError;
+  }
+  if (response.ok) return { model, response };
+
+  const detail = await errorDetail(response);
+  const retryable =
+    isRetiredModelStatus(response.status) || isTransientStatus(response.status);
+  throw Object.assign(new Error(`${model} (${response.status}: ${detail})`), {
+    model,
+    status: response.status,
+    fatal: !retryable,
+  } satisfies Partial<ModelAttemptError>) as ModelAttemptError;
+}
+
 /*
- * One chat completion against the NVIDIA API, trying the configured model
- * first and falling back through FALLBACK_MODELS when a model has been
- * retired (404/410). Returns the assistant text with any <think> block
- * stripped. Throws an APIError with a user-readable message otherwise.
+ * One chat completion against the NVIDIA API. Candidates (the configured
+ * model plus FALLBACK_MODELS) are raced in small groups of RACE_SIZE rather
+ * than tried one at a time: a single slow or overloaded backend previously
+ * ate the whole time budget before a second model ever got a turn. The
+ * fastest response in a group wins and the rest of that group is cancelled;
+ * if a whole group fails on retryable errors (retired model, transient
+ * gateway error, timeout), the next group is tried with whatever budget
+ * remains. A fatal error (bad request, bad API key) stops immediately since
+ * it would affect every model the same way. Returns the assistant text with
+ * any <think> block stripped; throws an APIError with a user-readable
+ * message otherwise.
  */
 export async function chatCompletion(
   messages: ChatMessage[],
@@ -129,68 +173,63 @@ export async function chatCompletion(
   }
 
   const started = Date.now();
+  const candidates = candidateModels();
   const attempts: string[] = [];
-  let response: Response | undefined;
 
-  for (const model of candidateModels()) {
+  for (let i = 0; i < candidates.length; i += RACE_SIZE) {
     const remaining = TOTAL_BUDGET_MS - (Date.now() - started);
-    if (remaining < MIN_ATTEMPT_MS) {
-      // Not enough of our own budget left for another round trip — stop
-      // here instead of starting an attempt that would likely run into
-      // Vercel's hard function limit and produce a raw, unhandled timeout.
-      break;
-    }
+    if (remaining < MIN_ATTEMPT_MS) break;
+
+    const group = candidates.slice(i, i + RACE_SIZE);
+    const controllers = group.map(() => new AbortController());
+    const timer = setTimeout(() => {
+      controllers.forEach((c) => c.abort());
+    }, remaining);
 
     try {
-      response = await requestCompletion(model, messages, maxTokens, remaining);
+      const winner = await Promise.any(
+        group.map((model, idx) =>
+          attemptModel(model, messages, maxTokens, controllers[idx].signal)
+        )
+      );
+      // Cancel whichever sibling in this group is still in flight — but not
+      // the winner's own controller, which would abort the response body we
+      // are about to read.
+      controllers.forEach((c, idx) => {
+        if (group[idx] !== winner.model) c.abort();
+      });
+
+      const data = (await winner.response.json()) as ChatCompletionResponse;
+      // Reasoning models may wrap deliberation in <think> tags — keep only
+      // the final text.
+      return (data.choices?.[0]?.message?.content ?? "")
+        .replace(/<think>[\s\S]*?<\/think>/gi, "")
+        .trim();
     } catch (error) {
-      // Network error or our own abort firing (slow/unreachable backend).
-      const reason = error instanceof Error ? error.message : String(error);
-      attempts.push(`${model} (network error: ${reason})`);
-      response = undefined;
-      continue;
+      if (error instanceof AggregateError) {
+        const errors = error.errors as ModelAttemptError[];
+        const fatal = errors.find((e) => e.fatal);
+        if (fatal) {
+          throw new APIError(
+            `The AI request failed: ${fatal.message}`,
+            fatal.status === 401 ? 400 : 502
+          );
+        }
+        attempts.push(...errors.map((e) => e.message));
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-
-    if (response.ok) break;
-    if (isRetiredModelStatus(response.status) || isTransientStatus(response.status)) {
-      attempts.push(`${model} (${response.status}: ${await errorDetail(response)})`);
-      continue;
-    }
-    // Any other error (bad request, auth, etc.) is not fixed by trying a
-    // different model — stop and surface it.
-    break;
   }
 
-  if (!response || !response.ok) {
-    if (attempts.length > 0 && !response) {
-      throw new APIError(
-        `The AI request failed: none of the configured models responded in time. ` +
-          `Tried ${attempts.join("; ")}.`,
-        504
-      );
-    }
-    if (response && (isRetiredModelStatus(response.status) || isTransientStatus(response.status))) {
-      throw new APIError(
-        `The AI request failed: none of the configured models are available right now. ` +
-          `Tried ${attempts.join("; ")}. If this persists, set NVIDIA_MODEL to a current ` +
-          `one from https://integrate.api.nvidia.com/v1/models.`,
-        502
-      );
-    }
-    const status = response?.status ?? 502;
-    const detail = response ? await errorDetail(response) : "no response";
-    throw new APIError(
-      `The AI request failed (${status}): ${detail}`,
-      status === 401 ? 400 : 502
-    );
-  }
-
-  const data = (await response.json()) as ChatCompletionResponse;
-  // Reasoning models may wrap deliberation in <think> tags — keep only the
-  // final text.
-  return (data.choices?.[0]?.message?.content ?? "")
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .trim();
+  throw new APIError(
+    `The AI request failed: none of the configured models responded in time. ` +
+      `Tried ${attempts.join("; ")}. If this persists, set NVIDIA_MODEL to a current ` +
+      `one from https://integrate.api.nvidia.com/v1/models.`,
+    504
+  );
 }
 
 export async function draftArticleMarkdown(
