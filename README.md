@@ -32,15 +32,20 @@ right away; the home page, post list, feed and sitemap are refreshed too.
 save" checkbox. Describe the article you want, tick the box, save — the AI
 writes a complete draft into the editor, which you can then edit and publish.
 
-- Uses the NVIDIA API ([build.nvidia.com](https://build.nvidia.com)); set
-  `NVIDIA_API_KEY` on the server.
+- Uses the NVIDIA API ([build.nvidia.com](https://build.nvidia.com), free);
+  set `NVIDIA_API_KEY` on the server.
 - Briefs may include URLs (e.g. "write about https://example.com"): the linked
   pages are fetched and handed to the model as source material, so it writes
   from the actual content instead of guessing.
-- Default model is `openai/gpt-oss-20b`. NVIDIA retires models regularly; when
-  the chosen model answers 404/410 the next current model in the built-in
-  fallback list is tried automatically. Override with `NVIDIA_MODEL` (pick one
-  from `https://integrate.api.nvidia.com/v1/models`).
+- Default model is `openai/gpt-oss-20b`, raced two at a time against the rest
+  of a built-in fallback list rather than tried one by one, so a single slow
+  or retired (404/410) model doesn't stall the whole request. Override the
+  first choice with `NVIDIA_MODEL` (pick one from
+  `https://integrate.api.nvidia.com/v1/models`).
+- Optional backstop: set `GEMINI_API_KEY` ([Google AI Studio](https://aistudio.google.com/apikey),
+  free on the Flash tier) and Gemini is tried only if every NVIDIA attempt
+  fails — no cost when NVIDIA is working. Works standalone too, without
+  `NVIDIA_API_KEY`.
 - Generation runs inside the save request. The Payload API route sets
   `maxDuration = 60`, the ceiling on Vercel's Hobby plan; without it saves
   time out after 10 s with a 504.
@@ -161,6 +166,8 @@ stays off when unconfigured.
 | `NVIDIA_API_KEY` | Enables "Draft with AI" |
 | `NVIDIA_MODEL` | Optional model override for AI drafting |
 | `NVIDIA_ENDPOINT` | Optional OpenAI-compatible chat endpoint override (tests) |
+| `GEMINI_API_KEY` | Optional backstop AI provider, used only if NVIDIA fails |
+| `GEMINI_MODEL` | Optional model override for the Gemini backstop |
 
 > [!IMPORTANT]
 > As of **May 2026**, Hashnode's GraphQL API [requires a paid Pro plan](https://hashnode.com/changelog/2026-05-13-graphql-api-paid-access)
