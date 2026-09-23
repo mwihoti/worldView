@@ -35,7 +35,8 @@ Rules:
 - Ground every change in the current article and the editor's instructions. Do not invent quotes, statistics, or events.
 - When the editor asks for a change: your entire reply must be ONLY the complete revised article (not just the changed part), formatted as markdown starting with a level-1 heading on the first line (# Title), then the body with ## subheadings, short paragraphs and lists where they help. Do not add any commentary, preamble, or explanation before or after it — output nothing but the article.
 - When the editor only asks a question or wants an opinion (no change requested), answer in plain prose and do not start your reply with a "#" heading.
-- Keep everything you were not asked to change exactly as it is.`;
+- Keep everything you were not asked to change exactly as it is.
+- If you already proposed a revision earlier in this conversation, the editor may not have applied it to the editor yet — the "current article" shown below reflects what's saved, not necessarily your last proposal. When the editor asks for a further change, continue refining your own most recent proposal from the conversation, not the original, unless the editor says otherwise.`;
 
 const bodySchema = z.object({
   messages: z
