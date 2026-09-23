@@ -19,6 +19,13 @@ import {
 type ChatTurn = {
   role: "user" | "assistant";
   content: string;
+  // What this turn is sent back to the model as, on later requests. For an
+  // assistant turn that proposed a revision this is the full article (the
+  // model's actual output), not the short "Here's the revised article."
+  // shown in the chat bubble — otherwise the model has no memory of what it
+  // proposed last time and can't reliably continue refining it on the next
+  // message. Defaults to `content` when absent (plain replies, user turns).
+  historyContent?: string;
   article?: { title: string | null; markdown: string; lexical: unknown };
   applied?: boolean;
 };
@@ -58,7 +65,10 @@ export function AIAssistant() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: history.map(({ role, content }) => ({ role, content })),
+            messages: history.map(({ role, content, historyContent }) => ({
+              role,
+              content: historyContent ?? content,
+            })),
             title,
             brief,
             content,
@@ -72,12 +82,16 @@ export function AIAssistant() {
         if (!res.ok) {
           throw new Error(data.errors?.[0]?.message ?? `Request failed (${res.status})`);
         }
+        const article = data.article ?? undefined;
         setTurns((prev) => [
           ...prev,
           {
             role: "assistant",
             content: data.reply ?? "",
-            article: data.article ?? undefined,
+            historyContent: article
+              ? `# ${article.title ?? title ?? "Untitled"}\n\n${article.markdown}`
+              : undefined,
+            article,
           },
         ]);
       } catch (error) {
