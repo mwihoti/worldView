@@ -120,7 +120,7 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Articles published here appear on the site within a few minutes. Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save.
+ * Articles published here appear on the site right away. Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save, then use the AI assistant below the content to request corrections before publishing.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "posts".
@@ -169,8 +169,8 @@ export interface Post {
 export interface Media {
   id: number;
   alt?: string | null;
-  _key?: string | null;
   prefix?: string | null;
+  _key?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -310,8 +310,8 @@ export interface PostsSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
-  _key?: T;
   prefix?: T;
+  _key?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;

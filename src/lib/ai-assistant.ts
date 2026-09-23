@@ -12,21 +12,29 @@ import { chatCompletion, splitTitle, type ChatMessage } from "./ai";
  * Conversational editing of a draft inside the admin. The panel sends the
  * chat history plus the article as it currently is in the editor; the model
  * answers and, when asked to change something, returns the complete revised
- * article between markers. We convert that back to Lexical so the panel can
- * drop it straight into the editor. Nothing is saved here: the admin reviews
- * the result and publishes when satisfied.
+ * article. We convert that back to Lexical so the panel can drop it straight
+ * into the editor. Nothing is saved here: the admin reviews the result and
+ * publishes when satisfied.
+ *
+ * Earlier version asked the model to wrap a revision in custom
+ * "<<<ARTICLE>>> ... <<<END_ARTICLE>>>" markers alongside a short prose
+ * summary. In production, real models (NVIDIA's fallback catalog, Gemini)
+ * did not reliably reproduce that exact token pair, so extraction silently
+ * failed and the "Apply to editor" button never appeared even though the
+ * model had, in fact, tried to help. The "# Title" heading convention below
+ * is the same one already used successfully for initial drafting
+ * (draftArticleMarkdown/splitTitle in ./ai.ts) — reusing a convention models
+ * already comply with reliably, instead of inventing a new fragile one.
  */
 
-const ARTICLE_START = "<<<ARTICLE>>>";
-const ARTICLE_END = "<<<END_ARTICLE>>>";
 const MAX_HISTORY = 12;
 
 const SYSTEM_PROMPT = `You are the editing assistant for WorldView, a news blog covering world news, sports, movies & TV, and tech. You help the editor refine an article draft.
 
 Rules:
 - Ground every change in the current article and the editor's instructions. Do not invent quotes, statistics, or events.
-- When the editor asks for changes, first reply in one to three plain sentences describing what you changed, then output the COMPLETE revised article (not just the changed part) between the lines ${ARTICLE_START} and ${ARTICLE_END}. Inside the markers use markdown: a level-1 heading with the title on the first line, then the body with ## subheadings, short paragraphs and lists where they help.
-- When the editor only asks a question or wants an opinion, answer it and do not output the markers.
+- When the editor asks for a change: your entire reply must be ONLY the complete revised article (not just the changed part), formatted as markdown starting with a level-1 heading on the first line (# Title), then the body with ## subheadings, short paragraphs and lists where they help. Do not add any commentary, preamble, or explanation before or after it — output nothing but the article.
+- When the editor only asks a question or wants an opinion (no change requested), answer in plain prose and do not start your reply with a "#" heading.
 - Keep everything you were not asked to change exactly as it is.`;
 
 const bodySchema = z.object({
@@ -45,17 +53,21 @@ const bodySchema = z.object({
 });
 
 function extractArticle(text: string): { reply: string; article: string | null } {
-  const start = text.indexOf(ARTICLE_START);
-  if (start === -1) return { reply: text.trim(), article: null };
-  const afterStart = start + ARTICLE_START.length;
-  const end = text.indexOf(ARTICLE_END, afterStart);
-  const article = text.slice(afterStart, end === -1 ? undefined : end).trim();
-  const reply = (
-    text.slice(0, start) + (end === -1 ? "" : text.slice(end + ARTICLE_END.length))
-  ).trim();
+  const trimmed = text.trim();
+  // A level-1 heading marks the start of a complete revised article (the
+  // same convention splitTitle() already parses for initial drafting).
+  // Everything from that line on is the article; anything before it (rare —
+  // the model is asked not to add any) is treated as a conversational
+  // reply. No heading anywhere means the model didn't propose a change.
+  const match = trimmed.match(/^#\s+.+$/m);
+  if (!match || match.index === undefined) {
+    return { reply: trimmed, article: null };
+  }
+  const article = trimmed.slice(match.index).trim();
+  const reply = trimmed.slice(0, match.index).trim();
   return {
-    reply: reply || "Here is the revised article.",
-    article: article || null,
+    reply: reply || "Here's the revised article.",
+    article,
   };
 }
 
