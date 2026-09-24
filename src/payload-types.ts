@@ -158,6 +158,10 @@ export interface Post {
     };
     [k: string]: unknown;
   } | null;
+  /**
+   * The admin who created this post. Set automatically. Posts made before this was tracked have no owner and count as the super-admin's.
+   */
+  owner?: (number | null) | User;
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -300,6 +304,7 @@ export interface PostsSelect<T extends boolean = true> {
   aiPrompt?: T;
   draftWithAI?: T;
   content?: T;
+  owner?: T;
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
