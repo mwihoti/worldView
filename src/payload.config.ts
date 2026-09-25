@@ -33,30 +33,55 @@ const uploadthingToken = process.env.UPLOADTHING_TOKEN;
 
 /*
  * Production runs on Postgres where the schema is only ever updated by hand
- * (Payload pushes schema changes automatically in dev only). The UploadThing
- * adapter added two hidden columns to "media"; until they exist every upload
- * fails with 'column "_key" does not exist'. Add them idempotently on
- * startup so a deploy is all that's needed. Safe to remove once the columns
- * are known to exist everywhere.
+ * (Payload pushes schema changes automatically in dev only), so columns added
+ * to the config after the first deploy don't exist there and every query that
+ * touches them fails. Add them idempotently on startup so a deploy is all
+ * that's needed:
+ *  - media.prefix / media._key, added by the UploadThing adapter
+ *  - posts.owner_id / _posts_v.version_owner_id, the admin that owns a post
+ *    (definitions copied from what Payload generates in dev)
+ * Safe to remove once these columns are known to exist everywhere.
  */
-const ensureMediaStorageColumns: NonNullable<Parameters<typeof buildConfig>[0]["onInit"]> =
+const SCHEMA_REPAIRS = [
+  `ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "prefix" varchar DEFAULT ''`,
+  `ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "_key" varchar`,
+  `ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "owner_id" integer`,
+  `ALTER TABLE "_posts_v" ADD COLUMN IF NOT EXISTS "version_owner_id" integer`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_owner_id_users_id_fk') THEN
+       ALTER TABLE "posts" ADD CONSTRAINT "posts_owner_id_users_id_fk"
+         FOREIGN KEY ("owner_id") REFERENCES "users"("id") ON DELETE SET NULL;
+     END IF;
+   END $$`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '_posts_v_version_owner_id_users_id_fk') THEN
+       ALTER TABLE "_posts_v" ADD CONSTRAINT "_posts_v_version_owner_id_users_id_fk"
+         FOREIGN KEY ("version_owner_id") REFERENCES "users"("id") ON DELETE SET NULL;
+     END IF;
+   END $$`,
+  `CREATE INDEX IF NOT EXISTS "posts_owner_idx" ON "posts" ("owner_id")`,
+  `CREATE INDEX IF NOT EXISTS "_posts_v_version_version_owner_idx" ON "_posts_v" ("version_owner_id")`,
+];
+
+const ensureSchemaColumns: NonNullable<Parameters<typeof buildConfig>[0]["onInit"]> =
   async (payload) => {
     if (payload.db.name !== "postgres") return;
     const { drizzle } = payload.db as unknown as PostgresAdapter;
-    try {
-      await drizzle.execute(
-        sql`ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "prefix" varchar DEFAULT ''`
-      );
-      await drizzle.execute(
-        sql`ALTER TABLE "media" ADD COLUMN IF NOT EXISTS "_key" varchar`
-      );
-    } catch (error) {
-      payload.logger.error({ err: error, msg: "Could not ensure media storage columns" });
+    // One statement at a time so a failure in one doesn't skip the rest.
+    for (const statement of SCHEMA_REPAIRS) {
+      try {
+        await drizzle.execute(sql.raw(statement));
+      } catch (error) {
+        payload.logger.error({
+          err: error,
+          msg: `Schema repair failed: ${statement.replace(/\s+/g, " ").slice(0, 90)}`,
+        });
+      }
     }
   };
 
 export default buildConfig({
-  onInit: ensureMediaStorageColumns,
+  onInit: ensureSchemaColumns,
   secret: process.env.PAYLOAD_SECRET || "worldview-dev-secret-change-me",
   db,
   editor: lexicalEditor(),

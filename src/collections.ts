@@ -3,11 +3,21 @@ import { APIError } from "payload";
 import { draftWithAI } from "./lib/ai";
 import { revalidateSite } from "./lib/revalidate";
 import { aiAssistantHandler } from "./lib/ai-assistant";
+import {
+  guardEmailChanges,
+  postAccess,
+  setPostOwner,
+  userAccess,
+} from "./lib/access";
 
 export const Users: CollectionConfig = {
   slug: "users",
   auth: true,
-  admin: { useAsTitle: "name" },
+  // Email is the identity here (it is what the post "Owner" column shows and
+  // what marks the super-admin), so use it as the display title.
+  admin: { useAsTitle: "email" },
+  access: userAccess,
+  hooks: { beforeChange: [guardEmailChanges] },
   fields: [
     { name: "name", type: "text", required: true },
   ],
@@ -110,14 +120,14 @@ export const Posts: CollectionConfig = {
   slug: "posts",
   admin: {
     useAsTitle: "title",
-    defaultColumns: ["title", "author", "_status", "publishedAt"],
+    defaultColumns: ["title", "owner", "author", "_status", "publishedAt"],
     description:
       "Articles published here appear on the site right away. " +
       "Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save, " +
       "then use the AI assistant below the content to request corrections before publishing.",
   },
   versions: { drafts: true },
-  access: { read: () => true },
+  access: postAccess,
   fields: [
     { name: "title", type: "text", required: true },
     {
@@ -179,6 +189,19 @@ export const Posts: CollectionConfig = {
     },
     { name: "content", type: "richText" },
     {
+      name: "owner",
+      label: "Owner (admin)",
+      type: "relationship",
+      relationTo: "users",
+      admin: {
+        position: "sidebar",
+        readOnly: true,
+        description:
+          "The admin who created this post. Set automatically. Posts made before " +
+          "this was tracked have no owner and count as the super-admin's.",
+      },
+    },
+    {
       name: "aiAssistant",
       type: "ui",
       admin: {
@@ -191,7 +214,7 @@ export const Posts: CollectionConfig = {
   // POST /api/posts/ai-chat — conversational editing used by the panel above.
   endpoints: [{ path: "/ai-chat", method: "post", handler: aiAssistantHandler }],
   hooks: {
-    beforeChange: [draftWithAI],
+    beforeChange: [setPostOwner, draftWithAI],
     // Make the change visible on the site right away instead of after the
     // 5-minute static cache expires.
     afterChange: [

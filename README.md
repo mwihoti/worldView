@@ -65,6 +65,36 @@ model configuration as drafting.
 and served straight from its CDN (public URLs), so the site never proxies
 image bytes through a serverless function.
 
+### Admin accounts and permissions
+
+There is one **super-admin**, identified by email (`danielmwihoti@gmail.com`,
+overridable with the `SUPER_ADMIN_EMAIL` environment variable). Everyone else
+is a regular admin. Rules live in `src/lib/access.ts`.
+
+| | Super-admin | Regular admin |
+| --- | --- | --- |
+| Add, delete or unlock admin users | yes | no |
+| Edit user accounts | any | only their own (name, password) |
+| Change an email address | any except its own | no |
+| Create posts | yes | yes |
+| See posts | all of them | their own and other regular admins', never the super-admin's or ownerless ones |
+| Edit / delete posts | any | only their own |
+
+- Every post records its **Owner (admin)** when created; it is set automatically
+  and can't be changed. The Owner column in the post list shows each post's
+  owner email, so admins can see who is working on what.
+- Posts created before ownership was tracked have no owner and count as the
+  super-admin's, so regular admins can't see them.
+- Visitors only ever get *published* posts from the REST API (drafts and
+  version history need a login). The public site itself is unaffected: it reads
+  through Payload's Local API, which bypasses access rules.
+- To add an admin, log in as the super-admin, open Users → Create New, set an
+  email and password, and share the password securely.
+- The super-admin's email can't be edited in the admin, since changing it would
+  silently demote the account. If the super-admin's login email is ever
+  different from the configured one, nobody can manage users: set
+  `SUPER_ADMIN_EMAIL` in Vercel to that login email and redeploy.
+
 ### Local development
 
 Works out of the box: the CMS uses a local SQLite file (`worldview.db`).
@@ -140,6 +170,7 @@ world-view-pi.vercel.app`); the admin only shows "Something went wrong".
 | `column "_key" does not exist` | Production schema predates the UploadThing adapter and the startup repair has not run yet. Deploy the current `main`. |
 | `Vercel Runtime Timeout Error: Task timed out after 10 seconds` on `PATCH /api/posts/…` | AI drafting exceeded the default function limit; the current code sets `maxDuration = 60`. Deploy the current `main`. |
 | `The model '…' has reached its end of life` | NVIDIA retired the model. The fallback list handles it; if all fail, set `NVIDIA_MODEL`. |
+| Can't create users, or your own older posts have disappeared, after a deploy | You are logged in with an email other than the super-admin's. Set `SUPER_ADMIN_EMAIL` to your login email and redeploy. |
 | An article or cover doesn't show up right after publishing | The cached page is being re-rendered; reload once. If it never appears, check that the post's `_status` is `published` (not just "Save draft"). |
 
 ## Getting started
@@ -161,6 +192,7 @@ stays off when unconfigured.
 | `NEXT_PUBLIC_HASHNODE_RSS_URL` | Public RSS feed used as a fallback when the GraphQL API is unavailable |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL used for SEO/sitemap/RSS |
 | `PAYLOAD_SECRET` | Signs admin auth tokens; required in production |
+| `SUPER_ADMIN_EMAIL` | Login email of the one account that can manage users and see every post (default `danielmwihoti@gmail.com`) |
 | `DATABASE_URI` | Postgres connection string for the CMS; unset = local SQLite |
 | `UPLOADTHING_TOKEN` | Media storage in production (UploadThing) |
 | `NVIDIA_API_KEY` | Enables "Draft with AI" |
