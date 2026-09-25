@@ -1,12 +1,13 @@
 import type { MetadataRoute } from "next";
 import { getPosts } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
+import { postPath } from "@/lib/post-url";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { edges } = await getPosts({ first: 50 });
 
   const posts: MetadataRoute.Sitemap = edges.map((edge) => ({
-    url: `${siteUrl}/${edge.node.slug}`,
+    url: `${siteUrl}${postPath(edge.node.slug)}`,
     lastModified: edge.node.publishedAt
       ? new Date(edge.node.publishedAt)
       : undefined,

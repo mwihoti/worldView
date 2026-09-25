@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { PostNode } from "@/lib/types";
+import { postPath } from "@/lib/post-url";
 import { Card, CardContent, CardHeader } from "./ui/card";
 
 type Props = {
@@ -13,7 +14,7 @@ export default function BlogCard({ post }: Props) {
       {post.coverImage && (
         <CardHeader className="p-0">
           <Link
-            href={`/${post.slug}`}
+            href={postPath(post.slug)}
             className="relative block aspect-video w-full"
           >
             <Image
@@ -28,7 +29,7 @@ export default function BlogCard({ post }: Props) {
       )}
       <CardContent className="pt-6">
         <h2 className="text-xl font-bold">
-          <Link href={`/${post.slug}`} className="hover:underline">
+          <Link href={postPath(post.slug)} className="hover:underline">
             {post.title}
           </Link>
         </h2>

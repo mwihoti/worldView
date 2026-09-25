@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { postPath } from "./post-url";
 
 /*
  * The public pages are statically cached (revalidate = 300), so an article
@@ -10,7 +11,7 @@ import { revalidatePath } from "next/cache";
 export function revalidateSite(slugs: Array<string | null | undefined> = []): void {
   const paths = new Set<string>(["/", "/posts", "/feed.xml", "/sitemap.xml"]);
   for (const slug of slugs) {
-    if (typeof slug === "string" && slug.trim()) paths.add(`/${slug.trim()}`);
+    if (typeof slug === "string" && slug) paths.add(postPath(slug));
   }
   paths.forEach((path) => {
     try {

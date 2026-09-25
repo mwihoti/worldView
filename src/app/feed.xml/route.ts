@@ -1,5 +1,6 @@
 import { getPosts, getPublication } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
+import { postPath } from "@/lib/post-url";
 
 export const revalidate = 3600;
 
@@ -22,7 +23,7 @@ export async function GET() {
 
   const items = edges
     .map(({ node }) => {
-      const url = `${siteUrl}/${node.slug}`;
+      const url = `${siteUrl}${postPath(node.slug)}`;
       return `    <item>
       <title>${escapeXml(node.title)}</title>
       <link>${url}</link>
