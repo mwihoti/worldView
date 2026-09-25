@@ -129,7 +129,15 @@ export const Posts: CollectionConfig = {
   versions: { drafts: true },
   access: postAccess,
   fields: [
-    { name: "title", type: "text", required: true },
+    {
+      name: "title",
+      type: "text",
+      required: true,
+      hooks: {
+        // Pasted titles often carry a trailing space.
+        beforeValidate: [({ value }) => (typeof value === "string" ? value.trim() : value)],
+      },
+    },
     {
       name: "slug",
       type: "text",
@@ -139,8 +147,14 @@ export const Posts: CollectionConfig = {
         description: "URL path of the article. Generated from the title if left empty.",
       },
       hooks: {
+        // Always clean the slug, including one typed or pasted by hand: a
+        // slug like "UbuTangaza " (capitals, trailing space) produced a link
+        // browsers could not follow, so the post 404ed.
         beforeValidate: [
-          ({ value, data }) => value || (data?.title ? slugify(data.title) : value),
+          ({ value, data }) => {
+            const raw = typeof value === "string" && value.trim() ? value : data?.title;
+            return typeof raw === "string" ? slugify(raw) : value;
+          },
         ],
       },
     },

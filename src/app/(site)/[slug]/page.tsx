@@ -7,6 +7,7 @@ import PostInteractions from "@/components/post-interactions";
 import { Button } from "@/components/ui/button";
 import { getPostBySlug, getPosts } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
+import { decodeSlug, postPath } from "@/lib/post-url";
 
 export const revalidate = 300;
 
@@ -20,7 +21,7 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
+  const slug = decodeSlug((await params).slug);
   const post = await getPostBySlug(slug);
   if (!post) return { title: "Post not found" };
 
@@ -43,13 +44,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
     },
     alternates: {
-      canonical: `/${post.slug}`,
+      canonical: postPath(post.slug),
     },
   };
 }
 
 export default async function BlogPostPage({ params }: Props) {
-  const { slug } = await params;
+  const slug = decodeSlug((await params).slug);
   const post = await getPostBySlug(slug);
   if (!post) notFound();
 
@@ -61,7 +62,7 @@ export default async function BlogPostPage({ params }: Props) {
     image: post.coverImage ? [post.coverImage.url] : undefined,
     datePublished: post.publishedAt ?? undefined,
     author: [{ "@type": "Person", name: post.author.name }],
-    mainEntityOfPage: `${siteUrl}/${post.slug}`,
+    mainEntityOfPage: `${siteUrl}${postPath(post.slug)}`,
   };
 
   return (
