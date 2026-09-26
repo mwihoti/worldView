@@ -79,12 +79,17 @@ is a regular admin. Rules live in `src/lib/access.ts`.
 | Create posts | yes | yes |
 | See posts | all of them | their own and other regular admins', never the super-admin's or ownerless ones |
 | Edit / delete posts | any | only their own |
+| Change a post's Owner | yes (dropdown on the post) | no |
 
-- Every post records its **Owner (admin)** when created; it is set automatically
-  and can't be changed. The Owner column in the post list shows each post's
-  owner email, so admins can see who is working on what.
+- Every post records its **Owner (admin)** when created; it is set
+  automatically, and only the super-admin can change it (a dropdown on the
+  post). The Owner column in the post list shows each post's owner email, so
+  admins can see who is working on what.
 - Posts created before ownership was tracked have no owner and count as the
-  super-admin's, so regular admins can't see them.
+  super-admin's, so regular admins can't see them, **including ones a regular
+  admin wrote themselves**. To give one back, open it as the super-admin, pick
+  the admin in the Owner dropdown and click Save Draft or Publish changes (the
+  change applies to the live post either way).
 - Visitors only ever get *published* posts from the REST API (drafts and
   version history need a login). The public site itself is unaffected: it reads
   through Payload's Local API, which bypasses access rules.
@@ -170,6 +175,7 @@ world-view-pi.vercel.app`); the admin only shows "Something went wrong".
 | `column "_key" does not exist` | Production schema predates the UploadThing adapter and the startup repair has not run yet. Deploy the current `main`. |
 | `Vercel Runtime Timeout Error: Task timed out after 10 seconds` on `PATCH /api/posts/…` | AI drafting exceeded the default function limit; the current code sets `maxDuration = 60`. Deploy the current `main`. |
 | `The model '…' has reached its end of life` | NVIDIA retired the model. The fallback list handles it; if all fail, set `NVIDIA_MODEL`. |
+| A regular admin can't find or edit a post they wrote earlier | It predates ownership tracking, so it has no owner. As the super-admin, open it and set the Owner dropdown to that admin, then save. |
 | Can't create users, or your own older posts have disappeared, after a deploy | You are logged in with an email other than the super-admin's. Set `SUPER_ADMIN_EMAIL` to your login email and redeploy. |
 | An article or cover doesn't show up right after publishing | The cached page is being re-rendered; reload once. If it never appears, check that the post's `_status` is `published` (not just "Save draft"). |
 

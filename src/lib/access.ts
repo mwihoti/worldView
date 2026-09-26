@@ -1,8 +1,10 @@
 import {
   APIError,
   type Access,
+  type CollectionAfterChangeHook,
   type CollectionBeforeChangeHook,
   type CollectionConfig,
+  type FieldAccess,
   type PayloadRequest,
   type Where,
 } from "payload";
@@ -109,8 +111,15 @@ export const userAccess: NonNullable<CollectionConfig["access"]> = {
 
 /*
  * Records who created a post. Set from the logged-in user on creation
- * (anything a client sends for it is ignored) and never changed afterwards.
+ * (anything a client sends for it is ignored). Afterwards only the
+ * super-admin can change it, to hand over a post: posts made before
+ * ownership was tracked have no owner, so a regular admin who wrote one
+ * loses sight of it until the super-admin assigns it to them. Everyone
+ * else's attempt to change it is ignored.
  */
+const ownerId = (owner: unknown) =>
+  owner && typeof owner === "object" ? (owner as { id?: number | string }).id : owner;
+
 export const setPostOwner: CollectionBeforeChangeHook = ({
   data,
   originalDoc,
@@ -119,12 +128,42 @@ export const setPostOwner: CollectionBeforeChangeHook = ({
 }) => {
   if (operation === "create") {
     if (req.user) data.owner = req.user.id;
+  } else if (isSuperAdmin(req.user) && data.owner !== undefined) {
+    data.owner = ownerId(data.owner) ?? null;
   } else {
-    const previous = originalDoc?.owner;
-    data.owner =
-      previous && typeof previous === "object" ? previous.id : previous ?? null;
+    data.owner = ownerId(originalDoc?.owner) ?? null;
   }
   return data;
+};
+
+/*
+ * A "Save draft" on an already-published post only writes a draft version and
+ * leaves the live post untouched, but ownership decides who can see and edit
+ * the post at all, so an owner change made that way must reach the live post
+ * too. Otherwise the super-admin would hand a post over, see the new owner in
+ * the form, and the new owner still couldn't find it. Direct database update:
+ * no hooks and no new version.
+ */
+export const syncOwnerToLiveDoc: CollectionAfterChangeHook = async ({
+  doc,
+  previousDoc,
+  req,
+}) => {
+  if (!isSuperAdmin(req.user)) return doc;
+  const next = ownerId(doc?.owner) ?? null;
+  if (next === (ownerId(previousDoc?.owner) ?? null)) return doc;
+  await req.payload.db.updateOne({
+    collection: "posts",
+    id: doc.id,
+    data: { owner: next },
+    req,
+    returning: false,
+  });
+  return doc;
+};
+
+export const ownerFieldAccess: { update: FieldAccess } = {
+  update: ({ req }) => isSuperAdmin(req.user),
 };
 
 /*
