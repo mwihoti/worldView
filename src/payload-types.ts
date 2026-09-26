@@ -159,7 +159,7 @@ export interface Post {
     [k: string]: unknown;
   } | null;
   /**
-   * The admin who created this post. Set automatically. Posts made before this was tracked have no owner and count as the super-admin's.
+   * The admin who created this post; set automatically. Only the super-admin can change it. Posts with no owner (made before this was tracked) count as the super-admin's and are hidden from other admins until assigned.
    */
   owner?: (number | null) | User;
   updatedAt: string;

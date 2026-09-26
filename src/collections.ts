@@ -5,8 +5,10 @@ import { revalidateSite } from "./lib/revalidate";
 import { aiAssistantHandler } from "./lib/ai-assistant";
 import {
   guardEmailChanges,
+  ownerFieldAccess,
   postAccess,
   setPostOwner,
+  syncOwnerToLiveDoc,
   userAccess,
 } from "./lib/access";
 
@@ -151,7 +153,10 @@ export const Posts: CollectionConfig = {
         // slug like "UbuTangaza " (capitals, trailing space) produced a link
         // browsers could not follow, so the post 404ed.
         beforeValidate: [
-          ({ value, data }) => {
+          ({ value, data, originalDoc }) => {
+            // Leave a saved slug alone unless it is being edited, so an older
+            // odd slug doesn't block unrelated saves (e.g. reassigning the owner).
+            if (typeof value === "string" && value && originalDoc?.slug === value) return value;
             const raw = typeof value === "string" && value.trim() ? value : data?.title;
             return typeof raw === "string" ? slugify(raw) : value;
           },
@@ -207,12 +212,14 @@ export const Posts: CollectionConfig = {
       label: "Owner (admin)",
       type: "relationship",
       relationTo: "users",
+      // Read-only for everyone but the super-admin, who can hand a post over.
+      access: ownerFieldAccess,
       admin: {
         position: "sidebar",
-        readOnly: true,
         description:
-          "The admin who created this post. Set automatically. Posts made before " +
-          "this was tracked have no owner and count as the super-admin's.",
+          "The admin who created this post; set automatically. Only the super-admin " +
+          "can change it. Posts with no owner (made before this was tracked) count as " +
+          "the super-admin's and are hidden from other admins until assigned.",
       },
     },
     {
@@ -232,6 +239,7 @@ export const Posts: CollectionConfig = {
     // Make the change visible on the site right away instead of after the
     // 5-minute static cache expires.
     afterChange: [
+      syncOwnerToLiveDoc,
       ({ doc, previousDoc }) => {
         revalidateSite([doc?.slug, previousDoc?.slug]);
         return doc;
