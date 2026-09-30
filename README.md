@@ -49,6 +49,15 @@ writes a complete draft into the editor, which you can then edit and publish.
 - Generation runs inside the save request. The Payload API route sets
   `maxDuration = 60`, the ceiling on Vercel's Hobby plan; without it saves
   time out after 10 s with a 504.
+- **Self-review loop:** every draft and every chat-assistant revision is
+  checked by a second model call acting as an editor, which scores it and
+  says whether it's ready. If not, the writer gets one more turn, using the
+  editor's own words as instructions, up to 3 rounds. This is adaptive, not
+  fixed: a clean draft publishes after one quick check, a rough one gets more
+  attention. Everything (the first draft and every review-and-revise round)
+  shares one time budget so it can never add up to more than Vercel's
+  function limit; if time runs low mid-review, the loop stops and returns the
+  best draft so far rather than failing the save. Code in `src/lib/article-loop.ts`.
 
 **AI assistant (chat):** below the content editor every post has an "AI
 assistant" panel. Chat with the model about the current draft — "fix the

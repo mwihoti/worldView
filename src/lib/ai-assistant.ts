@@ -7,13 +7,21 @@ import {
 import type { SerializedEditorState } from "lexical";
 import { z } from "zod";
 import { chatCompletion, splitTitle, type ChatMessage } from "./ai";
+import {
+  INITIAL_DRAFT_BUDGET_MS,
+  refineArticle,
+  TOTAL_REQUEST_BUDGET_MS,
+} from "./article-loop";
 
 /*
  * Conversational editing of a draft inside the admin. The panel sends the
  * chat history plus the article as it currently is in the editor; the model
  * answers and, when asked to change something, returns the complete revised
- * article. We convert that back to Lexical so the panel can drop it straight
- * into the editor. Nothing is saved here: the admin reviews the result and
+ * article. Before being handed back, a proposed revision runs through the
+ * same self-review loop as initial drafting (see article-loop.ts): a judge
+ * pass checks it and, if needed, the model gets another turn to fix it. We
+ * convert the final result to Lexical so the panel can drop it straight into
+ * the editor. Nothing is saved here: the admin reviews the result and
  * publishes when satisfied.
  *
  * Earlier version asked the model to wrap a revision in custom
@@ -23,8 +31,8 @@ import { chatCompletion, splitTitle, type ChatMessage } from "./ai";
  * failed and the "Apply to editor" button never appeared even though the
  * model had, in fact, tried to help. The "# Title" heading convention below
  * is the same one already used successfully for initial drafting
- * (draftArticleMarkdown/splitTitle in ./ai.ts) — reusing a convention models
- * already comply with reliably, instead of inventing a new fragile one.
+ * (splitTitle in ./ai.ts) — reusing a convention models already comply with
+ * reliably, instead of inventing a new fragile one.
  */
 
 const MAX_HISTORY = 12;
@@ -129,23 +137,36 @@ export const aiAssistantHandler: PayloadHandler = async (req) => {
     ...messages.slice(-MAX_HISTORY),
   ];
 
+  const started = Date.now();
   // Every turn regenerates the complete article, so keep this only as high
   // as a typical post needs — a lower ceiling means a faster response and
-  // less risk of running into Vercel's 60s function limit.
-  const text = await chatCompletion(chat, { maxTokens: 3000 });
+  // less risk of running into Vercel's 60s function limit. The call itself
+  // is capped so the self-review loop below is guaranteed a real turn too
+  // (see article-loop.ts for why one shared budget covers both).
+  const text = await chatCompletion(chat, {
+    maxTokens: 3000,
+    budgetMs: INITIAL_DRAFT_BUDGET_MS,
+  });
   if (!text) {
     throw new APIError("The AI returned an empty reply. Try again.", 502);
   }
 
   const { reply, article } = extractArticle(text);
   if (!article) {
+    // A plain answer, not a proposed change — nothing to self-review.
     return Response.json({ reply, article: null });
   }
 
-  const { title: newTitle, markdown } = splitTitle(article);
+  const remaining = TOTAL_REQUEST_BUDGET_MS - (Date.now() - started);
+  const { markdown: refinedArticle, rounds } = await refineArticle(chat, article, {
+    maxTokens: 3000,
+    budgetMs: remaining,
+  });
+
+  const { title: newTitle, markdown } = splitTitle(refinedArticle);
   const lexical = convertMarkdownToLexical({ editorConfig, markdown });
   return Response.json({
-    reply,
+    reply: rounds > 0 ? `${reply} (revised after ${rounds} round(s) of self-review.)` : reply,
     article: { title: newTitle, markdown, lexical },
   });
 };
