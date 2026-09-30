@@ -1,6 +1,6 @@
 import type { CollectionConfig } from "payload";
 import { APIError } from "payload";
-import { draftWithAI } from "./lib/ai";
+import { draftWithAI } from "./lib/article-loop";
 import { revalidateSite } from "./lib/revalidate";
 import { aiAssistantHandler } from "./lib/ai-assistant";
 import {
