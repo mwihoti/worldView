@@ -208,6 +208,20 @@ export const Posts: CollectionConfig = {
     },
     { name: "content", type: "richText" },
     {
+      name: "aiReviewRounds",
+      label: "AI self-review rounds",
+      type: "number",
+      admin: {
+        position: "sidebar",
+        readOnly: true,
+        description:
+          "Set automatically whenever the AI generates or revises this post's content: how " +
+          "many extra review-and-revise passes its self-check ran before settling on the " +
+          "current text. 0 means its first attempt was approved. Blank means no AI has " +
+          "written or revised the current content.",
+      },
+    },
+    {
       name: "owner",
       label: "Owner (admin)",
       type: "relationship",

@@ -167,6 +167,10 @@ export const aiAssistantHandler: PayloadHandler = async (req) => {
   const lexical = convertMarkdownToLexical({ editorConfig, markdown });
   return Response.json({
     reply: rounds > 0 ? `${reply} (revised after ${rounds} round(s) of self-review.)` : reply,
-    article: { title: newTitle, markdown, lexical },
+    // Structured, not just folded into the reply text, so the panel can
+    // record it on the post's own "AI self-review rounds" field when the
+    // admin applies this revision — the same visible proof the checkbox-
+    // triggered draft flow gets.
+    article: { title: newTitle, markdown, lexical, rounds },
   });
 };
