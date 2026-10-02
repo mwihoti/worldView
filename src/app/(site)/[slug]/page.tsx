@@ -93,7 +93,10 @@ export default async function BlogPostPage({ params }: Props) {
       <main id="main" className="wrap pb-6 pt-4 sm:pt-8">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{
+            // Escape "<" so a title containing "</script>" can't break out of the tag.
+            __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+          }}
         />
 
         <Link href="/" className="nav-link mb-8">
