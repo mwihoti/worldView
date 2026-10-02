@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Button } from "./ui/button";
+import { Mail } from "lucide-react";
 import { Input } from "./ui/input";
 import { subscribeToNewsletterAction } from "@/lib/actions";
 
@@ -39,26 +39,44 @@ export default function NewsletterCard() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            Join the newsletter!
-          </DialogTitle>
-        </DialogHeader>
-        <p>
-          Enter your email to join the newsletter and stay up to date with the
-          latest posts published in this blog!
-        </p>
-        <div className="flex flex-col gap-5 mt-3">
-          <Input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+      <DialogContent className="sticker gap-0 overflow-hidden border-2 border-ink p-0 sm:rounded-[var(--radius)]">
+        <div className="relative border-b-2 border-ink bg-primary px-6 pb-5 pt-7 text-primary-foreground">
+          <Mail
+            className="wiggle absolute right-14 top-5 h-12 w-12 opacity-90"
+            strokeWidth={1.8}
+            aria-hidden="true"
           />
-          <Button onClick={handleSubscribe} disabled={isPending}>
-            {isPending ? "Loading..." : "Subscribe"}
-          </Button>
+          <p className="font-hand text-2xl leading-none opacity-90">psst &mdash; before you go</p>
+          <DialogHeader className="mt-1 text-left">
+            <DialogTitle className="font-display text-3xl font-bold leading-tight">
+              Join the newsletter
+            </DialogTitle>
+          </DialogHeader>
+        </div>
+        <div className="p-6">
+          <p className="text-muted-foreground">
+            Enter your email to join the newsletter and stay up to date with the
+            latest posts published in this blog!
+          </p>
+          <div className="mt-5 flex flex-col gap-4">
+            <Input
+              type="email"
+              placeholder="you@example.com"
+              aria-label="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubscribe()}
+              className="h-11 rounded-lg border-2 border-ink bg-background text-base"
+            />
+            <button
+              type="button"
+              className="btn-ink justify-center"
+              onClick={handleSubscribe}
+              disabled={isPending}
+            >
+              {isPending ? "Sending\u2026" : "Subscribe"}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
