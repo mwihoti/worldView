@@ -40,6 +40,7 @@ const uploadthingToken = process.env.UPLOADTHING_TOKEN;
  *  - media.prefix / media._key, added by the UploadThing adapter
  *  - posts.owner_id / _posts_v.version_owner_id, the admin that owns a post
  *    (definitions copied from what Payload generates in dev)
+ *  - posts.ai_review_rounds / _posts_v.version_ai_review_rounds
  * Safe to remove once these columns are known to exist everywhere.
  */
 const SCHEMA_REPAIRS = [
@@ -61,6 +62,8 @@ const SCHEMA_REPAIRS = [
    END $$`,
   `CREATE INDEX IF NOT EXISTS "posts_owner_idx" ON "posts" ("owner_id")`,
   `CREATE INDEX IF NOT EXISTS "_posts_v_version_version_owner_idx" ON "_posts_v" ("version_owner_id")`,
+  `ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "ai_review_rounds" numeric`,
+  `ALTER TABLE "_posts_v" ADD COLUMN IF NOT EXISTS "version_ai_review_rounds" numeric`,
 ];
 
 const ensureSchemaColumns: NonNullable<Parameters<typeof buildConfig>[0]["onInit"]> =
