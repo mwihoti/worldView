@@ -159,6 +159,10 @@ export interface Post {
     [k: string]: unknown;
   } | null;
   /**
+   * Set automatically whenever the AI generates or revises this post's content: how many extra review-and-revise passes its self-check ran before settling on the current text. 0 means its first attempt was approved. Blank means no AI has written or revised the current content.
+   */
+  aiReviewRounds?: number | null;
+  /**
    * The admin who created this post; set automatically. Only the super-admin can change it. Posts with no owner (made before this was tracked) count as the super-admin's and are hidden from other admins until assigned.
    */
   owner?: (number | null) | User;
@@ -304,6 +308,7 @@ export interface PostsSelect<T extends boolean = true> {
   aiPrompt?: T;
   draftWithAI?: T;
   content?: T;
+  aiReviewRounds?: T;
   owner?: T;
   updatedAt?: T;
   createdAt?: T;

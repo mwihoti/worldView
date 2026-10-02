@@ -225,12 +225,15 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({
       ? data.title.trim()
       : undefined;
 
-  const { title, markdown } = await draftArticleMarkdown(prompt, existingTitle);
+  const { title, markdown, rounds } = await draftArticleMarkdown(prompt, existingTitle);
 
   const editorConfig = await editorConfigFactory.default({
     config: req.payload.config,
   });
   data.content = convertMarkdownToLexical({ editorConfig, markdown });
+  // Visible proof the self-review loop ran — there's no other sign of it in
+  // this checkbox-triggered flow, unlike the chat assistant's reply text.
+  data.aiReviewRounds = rounds;
 
   if (!existingTitle && title) {
     data.title = title;

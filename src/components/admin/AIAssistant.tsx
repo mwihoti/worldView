@@ -26,7 +26,12 @@ type ChatTurn = {
   // proposed last time and can't reliably continue refining it on the next
   // message. Defaults to `content` when absent (plain replies, user turns).
   historyContent?: string;
-  article?: { title: string | null; markdown: string; lexical: unknown };
+  article?: {
+    title: string | null;
+    markdown: string;
+    lexical: unknown;
+    rounds: number;
+  };
   applied?: boolean;
 };
 
@@ -126,6 +131,13 @@ export function AIAssistant() {
       if (turn.article.title && !title?.trim()) {
         dispatchFields({ type: "UPDATE", path: "title", value: turn.article.title });
       }
+      // Same visible proof the checkbox-triggered draft flow gets, so an
+      // applied correction isn't a silent change either.
+      dispatchFields({
+        type: "UPDATE",
+        path: "aiReviewRounds",
+        value: turn.article.rounds,
+      });
       setModified(true);
       setTurns((prev) => prev.map((t, i) => (i === index ? { ...t, applied: true } : t)));
       setPreview(null);

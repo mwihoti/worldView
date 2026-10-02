@@ -58,6 +58,11 @@ writes a complete draft into the editor, which you can then edit and publish.
   shares one time budget so it can never add up to more than Vercel's
   function limit; if time runs low mid-review, the loop stops and returns the
   best draft so far rather than failing the save. Code in `src/lib/article-loop.ts`.
+- **Seeing it happened:** there's no separate button for the loop — it runs
+  automatically as part of generating or revising. The sidebar field **AI
+  self-review rounds** on each post shows how many extra passes the last
+  AI-written or AI-revised save went through (0 = approved immediately;
+  blank = no AI involved yet).
 
 **AI assistant (chat):** below the content editor every post has an "AI
 assistant" panel. Chat with the model about the current draft — "fix the
