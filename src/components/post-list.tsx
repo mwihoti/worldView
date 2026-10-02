@@ -1,16 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ArrowDown, Loader2, PartyPopper } from "lucide-react";
 import BlogCard from "./blog-card";
-import { Button } from "./ui/button";
 import { loadMorePosts } from "@/lib/actions";
 import { PostsPage } from "@/lib/types";
 
 type Props = {
   initialPage: PostsPage;
+  /* Set false when something else on the page (a featured story) already
+   * accounts for the posts, so an empty list isn't reported as "no posts". */
+  showEmpty?: boolean;
+  /* Heading level of the card titles (see BlogCard). */
+  cardLevel?: 2 | 3;
 };
 
-export default function PostList({ initialPage }: Props) {
+export default function PostList({ initialPage, showEmpty = true, cardLevel = 3 }: Props) {
   const [edges, setEdges] = useState(initialPage.edges);
   const [pageInfo, setPageInfo] = useState(initialPage.pageInfo);
   const [isPending, startTransition] = useTransition();
@@ -27,31 +32,46 @@ export default function PostList({ initialPage }: Props) {
   }
 
   if (edges.length === 0) {
+    if (!showEmpty) return null;
     return (
-      <p className="text-center text-muted-foreground my-20">
-        No posts found.
+      <p className="font-hand my-20 text-center text-3xl text-muted-foreground">
+        Nothing here yet &mdash; check back soon.
       </p>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-      {edges.map((edge) => (
-        <BlogCard key={edge.node.id} post={edge.node} />
-      ))}
-      <div className="col-span-full w-full flex justify-center my-5">
-        <Button
-          className="w-full"
-          variant="outline"
-          disabled={!pageInfo.hasNextPage || isPending}
-          onClick={handleLoadMore}
-        >
-          {isPending
-            ? "Loading..."
-            : pageInfo.hasNextPage
-            ? "Load more"
-            : "That's all for today!"}
-        </Button>
+    <div>
+      <div className="grid grid-cols-1 gap-x-7 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
+        {edges.map((edge, i) => (
+          <BlogCard key={edge.node.id} post={edge.node} index={i} level={cardLevel} />
+        ))}
+      </div>
+
+      <div className="mt-12 flex justify-center">
+        {pageInfo.hasNextPage ? (
+          <button
+            type="button"
+            className="btn-ink"
+            disabled={isPending}
+            onClick={handleLoadMore}
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Fetching&hellip;
+              </>
+            ) : (
+              <>
+                Load more stories <ArrowDown className="h-4 w-4" aria-hidden="true" />
+              </>
+            )}
+          </button>
+        ) : (
+          <p className="font-hand inline-flex items-center gap-2 text-3xl text-muted-foreground">
+            <PartyPopper className="h-6 w-6 text-primary" aria-hidden="true" />
+            That&apos;s all for today!
+          </p>
+        )}
       </div>
     </div>
   );

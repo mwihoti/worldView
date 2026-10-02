@@ -1,25 +1,20 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export default function Loading() {
   return (
-    <main className="max-w-7xl w-full px-3 xl:px-0 mx-auto mt-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    <main className="wrap pt-10" aria-busy="true" aria-label="Loading stories">
+      <Skeleton className="h-6 w-40" />
+      <Skeleton className="mt-4 h-16 w-full max-w-2xl" />
+      <div className="mt-10 grid grid-cols-1 gap-x-7 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i} className="flex flex-col overflow-hidden">
-            <CardHeader className="p-0">
-              <Skeleton className="aspect-video w-full rounded-none" />
-            </CardHeader>
-            <CardContent className="pt-6 space-y-3">
-              <Skeleton className="h-6 w-3/4" />
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-7 w-7 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-              </div>
+          <div key={i} className="sticker overflow-hidden">
+            <Skeleton className="aspect-[16/10] w-full rounded-none" />
+            <div className="space-y-3 p-5">
+              <Skeleton className="h-6 w-4/5" />
               <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-            </CardContent>
-          </Card>
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </div>
         ))}
       </div>
     </main>

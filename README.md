@@ -21,6 +21,39 @@ drafting) and, optionally, a [Hashnode](https://hashnode.com) publication.
 - Loading skeletons, error and not-found states
 - Newsletter signup dialog wired to Hashnode's subscribe mutation
 
+## Look and feel
+
+The public site is styled like a field notebook: warm paper with a faint grain,
+ink-black outlines, hard offset "sticker" shadows, wobbly hand-drawn marks and a
+handwritten margin voice, with smooth scroll-driven motion on top. The Payload
+admin is a separate route group and is not affected.
+
+- **Typefaces** (self-hosted via `next/font`): Fraunces for headlines, Newsreader
+  for article text, Bricolage Grotesque for interface text, Caveat for the
+  handwritten notes.
+- **Reader themes**: Paper, Sepia, Moss, Ink and Blueprint, plus "Device" to
+  follow the system light/dark setting. Readers also pick a text size and
+  serif/sans from the **Reader** button in the header; choices are stored in
+  `localStorage` and restored before first paint. A theme is just a block of HSL
+  tokens in `src/app/globals.css` (`[data-theme='…']`): to add one, copy a block,
+  add its id to `themes` in `src/app/(site)/layout.tsx` and to `THEMES` in
+  `src/components/reader-settings.tsx`. Every text/background pair in every theme
+  meets WCAG AA (4.5:1) — re-check if you change colours.
+- **Covers**: posts without an uploaded image get a drawn illustration generated
+  from the post's slug and section (`src/lib/cover-art.ts`), so they are always
+  the same picture and never an empty box. The covers for the posts bundled in
+  `src/content/posts.ts` are the same art saved as files:
+  `node scripts/generate-covers.mjs` regenerates `public/covers/<version>/`.
+  Browsers, the CDN and Next's image optimiser cache by URL, so after redrawing
+  the art bump `COVER_VERSION` in `src/lib/cover-version.ts` before regenerating.
+- **Sections** (Sports, Movies & TV, Tech, Stories) are derived from the author,
+  with a title-keyword fallback: see `src/lib/category.ts`.
+- **Motion**: put `data-reveal` on anything that should fade/slide in as it scrolls
+  into view (variants `left`, `right`, `pop`, `fade`; `--reveal-delay` staggers);
+  article paragraphs do it automatically. First-screen content uses `data-enter`,
+  which is plain CSS and so never waits for JavaScript. Everything respects
+  `prefers-reduced-motion`, and without JavaScript the page is simply static.
+
 ## Writing articles — the admin panel
 
 The site embeds [Payload CMS](https://payloadcms.com): a full admin panel at

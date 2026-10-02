@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import { localPosts } from "@/content/posts";
+import { coverUrl } from "./cover-version";
 import { FullPost, PostEdge } from "./types";
 
 function toBrief(markdown: string): string {
@@ -18,7 +19,7 @@ export function getLocalPosts(): FullPost[] {
     slug: post.slug,
     brief: toBrief(post.markdown),
     publishedAt: post.publishedAt,
-    coverImage: post.cover ? { url: post.cover } : null,
+    coverImage: post.cover ? { url: coverUrl(post.cover) } : null,
     author: { name: post.author },
     content: { html: marked.parse(post.markdown, { async: false }) },
   }));
