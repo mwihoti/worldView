@@ -23,35 +23,36 @@ drafting) and, optionally, a [Hashnode](https://hashnode.com) publication.
 
 ## Look and feel
 
-The public site is styled like a field notebook: warm paper with a faint grain,
-ink-black outlines, hard offset "sticker" shadows, wobbly hand-drawn marks and a
-handwritten margin voice, with smooth scroll-driven motion on top. The Payload
-admin is a separate route group and is not affected.
+The public site is laid out like a newspaper front page: a navy masthead, a
+warm off-white page, large serif headlines, small orange section labels and
+hairline rules, with pictures doing the colour work. The Payload admin is a
+separate route group and is not affected.
 
-- **Typefaces** (self-hosted via `next/font`): Fraunces for headlines, Newsreader
-  for article text, Bricolage Grotesque for interface text, Caveat for the
-  handwritten notes.
-- **Reader themes**: Paper, Sepia, Moss, Ink and Blueprint, plus "Device" to
-  follow the system light/dark setting. Readers also pick a text size and
-  serif/sans from the **Reader** button in the header; choices are stored in
-  `localStorage` and restored before first paint. A theme is just a block of HSL
-  tokens in `src/app/globals.css` (`[data-theme='…']`): to add one, copy a block,
-  add its id to `themes` in `src/app/(site)/layout.tsx` and to `THEMES` in
-  `src/components/reader-settings.tsx`. Every text/background pair in every theme
-  meets WCAG AA (4.5:1) — re-check if you change colours.
-- **Covers**: posts without an uploaded image get a drawn illustration generated
-  from the post's slug and section (`src/lib/cover-art.ts`), so they are always
-  the same picture and never an empty box. The covers for the posts bundled in
-  `src/content/posts.ts` are the same art saved as files:
+- **Front page**: the newest story leads beside a "Latest headlines" column,
+  then "Latest stories" and a row for each section.
+- **Typefaces** (self-hosted via `next/font`): Source Serif 4 for headlines and
+  article text, Inter for the interface.
+- **Light and dark**: the moon/sun button in the masthead. Both are blocks of HSL
+  tokens in `src/app/globals.css` (`[data-theme='…']`). Every text/background
+  pair meets WCAG AA (4.5:1); re-check if you change colours.
+- **Sections**: World, Sports, Movies & TV and Technology, at
+  `/posts?section=world|sports|movies-tv|technology`. They are derived from the
+  author, with a title-keyword fallback; everything else is World. See
+  `src/lib/category.ts`.
+- **Search**: the magnifier in the masthead searches titles, standfirsts, authors
+  and sections (`/posts?q=…`).
+- **Subscribe** opens the newsletter form when Hashnode is configured, and links
+  to the RSS feed otherwise.
+- **Covers**: posts without an uploaded image get generated art in the same mood
+  (section colour, soft light, contour lines, a line drawing), seeded by the
+  slug so it never changes: `src/lib/cover-art.ts`. The covers for the posts
+  bundled in `src/content/posts.ts` are the same art saved as files:
   `node scripts/generate-covers.mjs` regenerates `public/covers/<version>/`.
   Browsers, the CDN and Next's image optimiser cache by URL, so after redrawing
   the art bump `COVER_VERSION` in `src/lib/cover-version.ts` before regenerating.
-- **Sections** (Sports, Movies & TV, Tech, Stories) are derived from the author,
-  with a title-keyword fallback: see `src/lib/category.ts`.
-- **Motion**: put `data-reveal` on anything that should fade/slide in as it scrolls
-  into view (variants `left`, `right`, `pop`, `fade`; `--reveal-delay` staggers);
-  article paragraphs do it automatically. First-screen content uses `data-enter`,
-  which is plain CSS and so never waits for JavaScript. Everything respects
+- **Motion**: put `data-reveal` on anything that should fade up as it scrolls
+  into view (`--reveal-delay` staggers it); first-screen content uses
+  `data-enter`, plain CSS that never waits for JavaScript. Everything respects
   `prefers-reduced-motion`, and without JavaScript the page is simply static.
 
 ## Writing articles — the admin panel

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { GraphQLClient, gql } from "graphql-request";
 import { env } from "./env";
+import { categoryFor, type CategoryId } from "./category";
 import { getRssPostBySlug, getRssPostsPage } from "./rss";
 import { getLocalPostBySlug, getLocalPostEdges } from "./local-posts";
 import { getPayloadPostBySlug, getPayloadPostEdges } from "./payload-posts";
@@ -184,6 +185,34 @@ export async function getPostsByAuthor(author: string): Promise<PostsPage> {
     edges: edges.filter((edge) =>
       edge.node.author.name.toLowerCase().includes(needle)
     ),
+    pageInfo: { hasNextPage: false, endCursor: null },
+  };
+}
+
+/* Every story in one section (see lib/category.ts), newest first. */
+export async function getPostsBySection(id: CategoryId): Promise<PostsPage> {
+  const { edges } = await getPosts({ first: 50 });
+  return {
+    edges: edges.filter((edge) => categoryFor(edge.node).id === id),
+    pageInfo: { hasNextPage: false, endCursor: null },
+  };
+}
+
+/* Stories whose title, standfirst, author or section mention every word of
+ * the query. Small site, so a plain in-memory match is enough. */
+export async function searchPosts(query: string): Promise<PostsPage> {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+  const { edges } = await getPosts({ first: 50 });
+  return {
+    edges: words.length
+      ? edges.filter(({ node }) => {
+          const haystack = [node.title, node.subtitle, node.brief, node.author.name, categoryFor(node).label]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return words.every((word) => haystack.includes(word));
+        })
+      : [],
     pageInfo: { hasNextPage: false, endCursor: null },
   };
 }
