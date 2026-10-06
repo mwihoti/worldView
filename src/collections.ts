@@ -1,8 +1,8 @@
 import type { CollectionConfig } from "payload";
 import { APIError } from "payload";
-import { draftWithAI } from "./lib/article-loop";
+import { aiReviewFields, applyReviewToken, draftWithAI } from "./lib/ai-review";
 import { revalidateSite } from "./lib/revalidate";
-import { aiAssistantHandler } from "./lib/ai-assistant";
+import { aiAssistantHandler, aiDraftHandler } from "./lib/ai-assistant";
 import {
   guardEmailChanges,
   ownerFieldAccess,
@@ -125,7 +125,7 @@ export const Posts: CollectionConfig = {
     defaultColumns: ["title", "owner", "author", "_status", "publishedAt"],
     description:
       "Articles published here appear on the site right away. " +
-      "Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save, " +
+      "Fill in “AI prompt” and click “Generate draft” to have the AI write a first draft, " +
       "then use the AI assistant below the content to request corrections before publishing.",
   },
   versions: { drafts: true },
@@ -193,34 +193,30 @@ export const Posts: CollectionConfig = {
       type: "textarea",
       admin: {
         description:
-          "Describe the article you want (topic, angle, length, tone). Used only when “Draft with AI” is ticked.",
+          "Describe the article you want (topic, angle, length, tone), then click “Generate draft”. Links to pages are read and used as sources.",
       },
     },
     {
+      // For REST/API callers: set to true on save to have the server write
+      // the draft. The admin uses the streaming "Generate draft" button below
+      // instead, which shows progress.
       name: "draftWithAI",
       label: "Draft with AI on save",
       type: "checkbox",
       defaultValue: false,
+      admin: { hidden: true },
+    },
+    {
+      name: "aiDraft",
+      type: "ui",
       admin: {
-        description:
-          "When ticked, saving generates the article content from the AI prompt (replaces the current content).",
+        components: {
+          Field: "/components/admin/AIDraftButton#AIDraftButton",
+        },
       },
     },
     { name: "content", type: "richText" },
-    {
-      name: "aiReviewRounds",
-      label: "AI self-review rounds",
-      type: "number",
-      admin: {
-        position: "sidebar",
-        readOnly: true,
-        description:
-          "Set automatically whenever the AI generates or revises this post's content: how " +
-          "many extra review-and-revise passes its self-check ran before settling on the " +
-          "current text. 0 means its first attempt was approved. Blank means no AI has " +
-          "written or revised the current content.",
-      },
-    },
+    ...aiReviewFields,
     {
       name: "owner",
       label: "Owner (admin)",
@@ -246,10 +242,13 @@ export const Posts: CollectionConfig = {
       },
     },
   ],
-  // POST /api/posts/ai-chat — conversational editing used by the panel above.
-  endpoints: [{ path: "/ai-chat", method: "post", handler: aiAssistantHandler }],
+  // Streaming AI endpoints used by the admin panels above (see ai-assistant.ts).
+  endpoints: [
+    { path: "/ai-draft", method: "post", handler: aiDraftHandler },
+    { path: "/ai-chat", method: "post", handler: aiAssistantHandler },
+  ],
   hooks: {
-    beforeChange: [setPostOwner, draftWithAI],
+    beforeChange: [setPostOwner, applyReviewToken, draftWithAI],
     // Make the change visible on the site right away instead of after the
     // 5-minute static cache expires.
     afterChange: [

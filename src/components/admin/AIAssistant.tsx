@@ -5,9 +5,18 @@ import {
   Button,
   toast,
   useConfig,
+  useDocumentInfo,
   useForm,
   useFormFields,
 } from "@payloadcms/ui";
+import { AIProgress } from "./AIProgress";
+import {
+  applyArticleToForm,
+  postAIStream,
+  reviewText,
+  type AIArticle,
+  type Progress,
+} from "./ai-stream";
 
 /*
  * "AI assistant" panel on the post edit screen. The editor chats with the
@@ -26,12 +35,7 @@ type ChatTurn = {
   // proposed last time and can't reliably continue refining it on the next
   // message. Defaults to `content` when absent (plain replies, user turns).
   historyContent?: string;
-  article?: {
-    title: string | null;
-    markdown: string;
-    lexical: unknown;
-    rounds: number;
-  };
+  article?: AIArticle;
   applied?: boolean;
 };
 
@@ -44,6 +48,7 @@ const SUGGESTIONS = [
 
 export function AIAssistant() {
   const { config } = useConfig();
+  const { id } = useDocumentInfo();
   const { dispatchFields, setModified } = useForm();
   const title = useFormFields(([fields]) => fields.title?.value as string | undefined);
   const brief = useFormFields(([fields]) => fields.aiPrompt?.value as string | undefined);
@@ -51,7 +56,9 @@ export function AIAssistant() {
 
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [steps, setSteps] = useState<Progress[]>([]);
+  const busy = startedAt !== null;
   const [open, setOpen] = useState(true);
   const [preview, setPreview] = useState<number | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -63,13 +70,12 @@ export function AIAssistant() {
       const history = [...turns, { role: "user" as const, content: text }];
       setTurns(history);
       setInput("");
-      setBusy(true);
+      setSteps([]);
+      setStartedAt(Date.now());
       try {
-        const res = await fetch(`${config.routes.api}/posts/ai-chat`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await postAIStream<{ reply?: string; article?: AIArticle | null }>(
+          `${config.routes.api}/posts/ai-chat`,
+          {
             messages: history.map(({ role, content, historyContent }) => ({
               role,
               content: historyContent ?? content,
@@ -77,22 +83,18 @@ export function AIAssistant() {
             title,
             brief,
             content,
-          }),
-        });
-        const data = (await res.json()) as {
-          reply?: string;
-          article?: ChatTurn["article"] | null;
-          errors?: { message: string }[];
-        };
-        if (!res.ok) {
-          throw new Error(data.errors?.[0]?.message ?? `Request failed (${res.status})`);
-        }
+            postId: id ?? null,
+          },
+          (step) => setSteps((prev) => [...prev, step])
+        );
         const article = data.article ?? undefined;
         setTurns((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: data.reply ?? "",
+            content: article
+              ? `${data.reply ?? "Here's the revised article."}\n\n${reviewText(article.review)}`
+              : (data.reply ?? ""),
             historyContent: article
               ? `# ${article.title ?? title ?? "Untitled"}\n\n${article.markdown}`
               : undefined,
@@ -107,37 +109,21 @@ export function AIAssistant() {
           { role: "assistant", content: `Sorry, that failed: ${msg}` },
         ]);
       } finally {
-        setBusy(false);
+        setStartedAt(null);
         setTimeout(() => {
           logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
         }, 0);
       }
     },
-    [busy, turns, config.routes.api, title, brief, content]
+    [busy, turns, config.routes.api, title, brief, content, id]
   );
 
   const apply = useCallback(
     (index: number) => {
       const turn = turns[index];
       if (!turn?.article) return;
-      // Setting initialValue alongside value makes the Lexical field re-mount
-      // with the new document; value alone would be ignored by the editor.
-      dispatchFields({
-        type: "UPDATE",
-        path: "content",
-        value: turn.article.lexical,
-        initialValue: turn.article.lexical,
-      });
-      if (turn.article.title && !title?.trim()) {
-        dispatchFields({ type: "UPDATE", path: "title", value: turn.article.title });
-      }
-      // Same visible proof the checkbox-triggered draft flow gets, so an
-      // applied correction isn't a silent change either.
-      dispatchFields({
-        type: "UPDATE",
-        path: "aiReviewRounds",
-        value: turn.article.rounds,
-      });
+      // Content, title, and the review (shown in the sidebar, stored on save).
+      applyArticleToForm(dispatchFields, turn.article, title);
       setModified(true);
       setTurns((prev) => prev.map((t, i) => (i === index ? { ...t, applied: true } : t)));
       setPreview(null);
@@ -207,7 +193,7 @@ export function AIAssistant() {
                 )}
               </div>
             ))}
-            {busy && <div style={styles.empty}>Thinking…</div>}
+            {startedAt !== null && <AIProgress steps={steps} startedAt={startedAt} />}
           </div>
 
           <div style={styles.suggestions}>

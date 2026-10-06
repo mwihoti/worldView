@@ -196,3 +196,39 @@ export const guardEmailChanges: CollectionBeforeChangeHook = ({
   }
   return data;
 };
+
+/*
+ * The AI endpoints act on a post the editor has open. When it already
+ * exists, they may only be used by someone allowed to edit it — the same
+ * rule as `update` above — so an admin can't use the assistant to read or
+ * rewrite another admin's post. A post that hasn't been saved yet (no id)
+ * belongs to whoever is creating it.
+ */
+export async function assertCanEditPost(
+  req: PayloadRequest,
+  postId: string | number | null | undefined
+): Promise<void> {
+  if (!req.user) {
+    throw new APIError("You must be logged in to use the AI assistant.", 401);
+  }
+  if (postId === null || postId === undefined || postId === "") return;
+
+  let doc: { owner?: unknown } | null = null;
+  try {
+    doc = await req.payload.findByID({
+      collection: "posts",
+      id: postId,
+      depth: 0,
+      draft: true,
+      overrideAccess: true,
+      req,
+    });
+  } catch {
+    doc = null;
+  }
+  if (!doc) throw new APIError("That post doesn't exist.", 404);
+  if (isSuperAdmin(req.user)) return;
+  if ((ownerId(doc.owner) ?? null) !== req.user.id) {
+    throw new APIError("You can only use the AI assistant on your own posts.", 403);
+  }
+}
