@@ -120,7 +120,7 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Articles published here appear on the site right away. Fill in “AI prompt” and tick “Draft with AI” to have the AI write a first draft on save, then use the AI assistant below the content to request corrections before publishing.
+ * Articles published here appear on the site right away. Fill in “AI prompt” and click “Generate draft” to have the AI write a first draft, then use the AI assistant below the content to request corrections before publishing.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "posts".
@@ -136,12 +136,9 @@ export interface Post {
   publishedAt?: string | null;
   cover?: (number | null) | Media;
   /**
-   * Describe the article you want (topic, angle, length, tone). Used only when “Draft with AI” is ticked.
+   * Describe the article you want (topic, angle, length, tone), then click “Generate draft”. Links to pages are read and used as sources.
    */
   aiPrompt?: string | null;
-  /**
-   * When ticked, saving generates the article content from the AI prompt (replaces the current content).
-   */
   draftWithAI?: boolean | null;
   content?: {
     root: {
@@ -159,9 +156,14 @@ export interface Post {
     [k: string]: unknown;
   } | null;
   /**
-   * Set automatically whenever the AI generates or revises this post's content: how many extra review-and-revise passes its self-check ran before settling on the current text. 0 means its first attempt was approved. Blank means no AI has written or revised the current content.
+   * Set automatically whenever the AI generates or revises this post's content: how many extra review-and-revise passes its self-check ran before settling on the current text. Blank means no AI has written or revised the current content.
    */
   aiReviewRounds?: number | null;
+  aiReviewStatus?: string | null;
+  aiReviewScore?: number | null;
+  aiReviewNote?: string | null;
+  aiReviewModels?: string | null;
+  aiReviewToken?: string | null;
   /**
    * The admin who created this post; set automatically. Only the super-admin can change it. Posts with no owner (made before this was tracked) count as the super-admin's and are hidden from other admins until assigned.
    */
@@ -198,6 +200,10 @@ export interface Media {
 export interface User {
   id: number;
   name: string;
+  /**
+   * Super-admins manage users and roles and can edit every post. Admins write and edit their own posts.
+   */
+  role?: ('admin' | 'super-admin') | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -205,6 +211,7 @@ export interface User {
   resetPasswordExpiration?: string | null;
   salt?: string | null;
   hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
   sessions?:
@@ -309,6 +316,11 @@ export interface PostsSelect<T extends boolean = true> {
   draftWithAI?: T;
   content?: T;
   aiReviewRounds?: T;
+  aiReviewStatus?: T;
+  aiReviewScore?: T;
+  aiReviewNote?: T;
+  aiReviewModels?: T;
+  aiReviewToken?: T;
   owner?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -340,6 +352,7 @@ export interface MediaSelect<T extends boolean = true> {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  role?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -347,6 +360,7 @@ export interface UsersSelect<T extends boolean = true> {
   resetPasswordExpiration?: T;
   salt?: T;
   hash?: T;
+  resetPasswordRequestedAt?: T;
   loginAttempts?: T;
   lockUntil?: T;
   sessions?:

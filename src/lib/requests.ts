@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { GraphQLClient, gql } from "graphql-request";
 import { env } from "./env";
 import { getRssPostBySlug, getRssPostsPage } from "./rss";
@@ -23,6 +24,10 @@ const client = env.NEXT_PUBLIC_HASHNODE_ENDPOINT
   ? new GraphQLClient(env.NEXT_PUBLIC_HASHNODE_ENDPOINT)
   : null;
 const publicationId = env.NEXT_PUBLIC_HASHNODE_PUBLICATION_ID ?? "";
+
+/* Newsletter sign-up goes through Hashnode, so it only exists when Hashnode
+ * is configured; otherwise the site doesn't offer it at all. */
+export const newsletterAvailable = Boolean(client && publicationId);
 
 /** The client, or a throw that safeRequest turns into the caller's fallback. */
 function hashnode(): GraphQLClient {
@@ -90,13 +95,23 @@ export async function getPublication(): Promise<Publication> {
   });
 }
 
-export async function getPosts({
+/*
+ * getPosts / getPostBySlug are memoised per request (React cache), so a page
+ * and its metadata, or a page and its related-posts strip, share one fetch.
+ * cache() compares arguments by identity, hence the primitive-argument inner
+ * function behind getPosts' options object.
+ */
+export function getPosts({
   first = 12,
   after = "",
 }: {
   first?: number;
   after?: string;
 } = {}): Promise<PostsPage> {
+  return getPostsCached(first, after);
+}
+
+const getPostsCached = cache(async (first: number, after: string): Promise<PostsPage> => {
   const query = gql`
     ${POST_FIELDS}
     query getPosts($publicationId: ObjectId!, $first: Int!, $after: String) {
@@ -155,7 +170,7 @@ export async function getPosts({
   }
 
   return page;
-}
+});
 
 /*
  * Hashnode's public API can't filter a publication's posts by author name,
@@ -173,7 +188,7 @@ export async function getPostsByAuthor(author: string): Promise<PostsPage> {
   };
 }
 
-export async function getPostBySlug(slug: string): Promise<FullPost | null> {
+export const getPostBySlug = cache(async (slug: string): Promise<FullPost | null> => {
   const query = gql`
     ${POST_FIELDS}
     query getPostBySlug($publicationId: ObjectId!, $slug: String!) {
@@ -202,7 +217,7 @@ export async function getPostBySlug(slug: string): Promise<FullPost | null> {
     (await getPayloadPostBySlug(slug)) ??
     getLocalPostBySlug(slug)
   );
-}
+});
 
 export async function subscribeToNewsletter(email: string) {
   const mutation = gql`

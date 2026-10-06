@@ -15,6 +15,7 @@ import { getPostBySlug, getPosts } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
 import { decodeSlug, postPath } from "@/lib/post-url";
 import { readingMinutes } from "@/lib/reading-time";
+import { sanitizeArticleHtml } from "@/lib/sanitize";
 
 export const revalidate = 300;
 
@@ -27,12 +28,21 @@ export async function generateStaticParams() {
   return edges.map((edge) => ({ slug: edge.node.slug }));
 }
 
+/* The uploaded cover when there is one, else the generated PNG card (social
+ * sites don't accept the SVG cover art). */
+function shareImage(post: { slug: string; title: string; coverImage?: { url: string } | null }) {
+  return post.coverImage
+    ? { url: post.coverImage.url, alt: post.title }
+    : { url: `/og/${encodeURIComponent(post.slug)}`, width: 1200, height: 630, alt: post.title };
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = decodeSlug((await params).slug);
   const post = await getPostBySlug(slug);
   if (!post) return { title: "Post not found" };
 
   const description = post.brief || post.subtitle || undefined;
+  const image = shareImage(post);
 
   return {
     title: post.title,
@@ -43,12 +53,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       publishedTime: post.publishedAt ?? undefined,
       authors: [post.author.name],
-      images: post.coverImage ? [{ url: post.coverImage.url }] : undefined,
+      images: [image],
     },
     twitter: {
-      card: post.coverImage ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title: post.title,
       description,
+      images: [image.url],
     },
     alternates: {
       canonical: postPath(post.slug),
@@ -66,14 +77,16 @@ export default async function BlogPostPage({ params }: Props) {
     "@type": "NewsArticle",
     headline: post.title,
     description: post.brief || post.subtitle || undefined,
-    image: post.coverImage ? [post.coverImage.url] : undefined,
+    image: [new URL(shareImage(post).url, siteUrl).toString()],
     datePublished: post.publishedAt ?? undefined,
     author: [{ "@type": "Person", name: post.author.name }],
     mainEntityOfPage: `${siteUrl}${postPath(post.slug)}`,
+    publisher: { "@type": "Organization", name: "WorldView", url: siteUrl },
   };
 
   const category = categoryFor(post);
-  const minutes = readingMinutes(post.content.html);
+  const html = sanitizeArticleHtml(post.content.html);
+  const minutes = readingMinutes(html);
   const dateLong = post.publishedAt
     ? new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(new Date(post.publishedAt))
     : null;
@@ -184,7 +197,7 @@ export default async function BlogPostPage({ params }: Props) {
           <div
             id="article-body"
             className="blog-content has-dropcap mt-14"
-            dangerouslySetInnerHTML={{ __html: post.content.html }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
 
           <div data-reveal className="mx-auto mt-14 flex max-w-xs items-center justify-center gap-3 text-muted-foreground">
