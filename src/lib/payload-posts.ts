@@ -1,66 +1,115 @@
+import { cache } from "react";
 import { getPayload } from "payload";
 import { convertLexicalToHTML } from "@payloadcms/richtext-lexical/html";
 import config from "@payload-config";
-import { FullPost, PostEdge } from "./types";
-
-function toBrief(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 240);
-}
+import type { Post } from "@/payload-types";
+import { FullPost, PostEdge, PostNode } from "./types";
 
 /*
  * Posts authored in the Payload admin (/admin). Wrapped in try/catch so the
  * public site keeps working when the database isn't provisioned yet.
+ *
+ * Lists never render article bodies, so they don't convert any rich text to
+ * HTML (the brief comes straight from the editor's text nodes), and a single
+ * post is fetched by slug rather than by loading everything and searching.
+ * Both are memoised per request with React's cache(): a post page asks for
+ * its post in generateMetadata and again in the page, and for the list in
+ * the related-posts strip.
  */
-export async function getPayloadPosts(): Promise<FullPost[]> {
+
+type LexicalNode = { text?: unknown; children?: LexicalNode[]; type?: string };
+
+/* Plain text of a Lexical document, paragraphs separated by spaces. */
+export function lexicalPlainText(content: unknown, limit = 400): string {
+  const parts: string[] = [];
+  let length = 0;
+  const walk = (node: LexicalNode | undefined) => {
+    if (!node || length >= limit) return;
+    if (typeof node.text === "string") {
+      parts.push(node.text);
+      length += node.text.length;
+    }
+    node.children?.forEach(walk);
+    if (node.type === "paragraph" || node.type === "heading") parts.push(" ");
+  };
+  walk((content as { root?: LexicalNode } | null)?.root);
+  return parts.join("").replace(/\s+/g, " ").trim();
+}
+
+function toBrief(content: unknown): string {
+  return lexicalPlainText(content, 300).slice(0, 240);
+}
+
+function toNode(doc: Post): PostNode {
+  const cover =
+    doc.cover && typeof doc.cover === "object" && doc.cover.url
+      ? { url: doc.cover.url }
+      : null;
+  return {
+    id: `payload-${doc.id}`,
+    title: doc.title,
+    slug: doc.slug ?? String(doc.id),
+    brief: toBrief(doc.content),
+    publishedAt: doc.publishedAt ?? doc.createdAt ?? null,
+    coverImage: cover,
+    author: { name: doc.author || "WorldView" },
+  };
+}
+
+function logUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Payload posts unavailable: ${message.slice(0, 200)}`);
+}
+
+export const getPayloadPostEdges = cache(async (): Promise<PostEdge[]> => {
   try {
     const payload = await getPayload({ config });
     const result = await payload.find({
       collection: "posts",
       where: { _status: { equals: "published" } },
       sort: "-publishedAt",
-      limit: 100,
+      // Every published post: the site, feed and sitemap list them all.
+      pagination: false,
       depth: 1,
+      select: {
+        title: true,
+        slug: true,
+        author: true,
+        publishedAt: true,
+        createdAt: true,
+        cover: true,
+        content: true,
+      },
     });
-
     return result.docs.map((doc) => {
-      const cover =
-        doc.cover && typeof doc.cover === "object" && doc.cover.url
-          ? { url: doc.cover.url }
-          : null;
-      const html = doc.content
-        ? convertLexicalToHTML({ data: doc.content })
-        : "";
-
-      return {
-        id: `payload-${doc.id}`,
-        title: doc.title,
-        slug: doc.slug ?? String(doc.id),
-        brief: toBrief(html),
-        publishedAt: doc.publishedAt ?? doc.createdAt ?? null,
-        coverImage: cover,
-        author: { name: doc.author || "WorldView" },
-        content: { html },
-      };
+      const node = toNode(doc as Post);
+      return { node, cursor: node.id };
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Payload posts unavailable: ${message.slice(0, 200)}`);
+    logUnavailable(error);
     return [];
   }
-}
+});
 
-export async function getPayloadPostEdges(): Promise<PostEdge[]> {
-  const posts = await getPayloadPosts();
-  return posts.map((post) => ({ node: post, cursor: post.id }));
-}
-
-export async function getPayloadPostBySlug(
-  slug: string
-): Promise<FullPost | null> {
-  const posts = await getPayloadPosts();
-  return posts.find((post) => post.slug === slug) ?? null;
-}
+export const getPayloadPostBySlug = cache(
+  async (slug: string): Promise<FullPost | null> => {
+    try {
+      const payload = await getPayload({ config });
+      const { docs } = await payload.find({
+        collection: "posts",
+        where: {
+          and: [{ slug: { equals: slug } }, { _status: { equals: "published" } }],
+        },
+        limit: 1,
+        depth: 1,
+      });
+      const doc = docs[0];
+      if (!doc) return null;
+      const html = doc.content ? convertLexicalToHTML({ data: doc.content }) : "";
+      return { ...toNode(doc), content: { html } };
+    } catch (error) {
+      logUnavailable(error);
+      return null;
+    }
+  }
+);

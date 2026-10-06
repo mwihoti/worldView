@@ -7,7 +7,7 @@ import Footer from "@/components/footer";
 import { ThemeProvider } from "@/components/theme-provider";
 import RevealObserver from "@/components/reveal-observer";
 import { Toaster } from "@/components/ui/sonner";
-import { getPublication } from "@/lib/requests";
+import { getPublication, newsletterAvailable } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
 
 /*
@@ -63,11 +63,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: title,
       title,
       description,
+      images: [{ url: "/og", width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: ["/og"],
     },
     alternates: {
       types: { "application/rss+xml": "/feed.xml" },
@@ -105,7 +107,7 @@ export default function RootLayout({
           </a>
           <Navbar />
           {children}
-          <NewsletterCard />
+          {newsletterAvailable && <NewsletterCard />}
           <Footer />
           <Toaster />
           <RevealObserver />
