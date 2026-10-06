@@ -61,15 +61,20 @@ The site embeds [Payload CMS](https://payloadcms.com): a full admin panel at
 text editor. Publishing (or updating) an article re-renders the affected pages
 right away; the home page, post list, feed and sitemap are refreshed too.
 
-**AI drafting:** every post has an "AI prompt" field and a "Draft with AI on
-save" checkbox. Describe the article you want, tick the box, save — the AI
-writes a complete draft into the editor, which you can then edit and publish.
+**AI drafting:** every post has an "AI prompt" field and a **Generate draft**
+button under it. Describe the article you want and click it: the panel shows
+each stage as it happens (reading linked pages, writing, the reviewer's score
+and note, each revision, with a timer), then puts the finished draft in the
+editor. Nothing is saved until you click Save Draft or Publish. (API callers
+can still set `draftWithAI: true` on save instead.)
 
 - Uses the NVIDIA API ([build.nvidia.com](https://build.nvidia.com), free);
   set `NVIDIA_API_KEY` on the server.
 - Briefs may include URLs (e.g. "write about https://example.com"): the linked
   pages are fetched and handed to the model as source material, so it writes
-  from the actual content instead of guessing.
+  from the actual content instead of guessing. Only public web pages are
+  fetched (private, loopback and cloud-metadata addresses are refused, also
+  after redirects), up to 2 MB each.
 - Default model is `openai/gpt-oss-20b`, raced two at a time against the rest
   of a built-in fallback list rather than tried one by one, so a single slow
   or retired (404/410) model doesn't stall the whole request. Override the
@@ -79,23 +84,25 @@ writes a complete draft into the editor, which you can then edit and publish.
   free on the Flash tier) and Gemini is tried only if every NVIDIA attempt
   fails — no cost when NVIDIA is working. Works standalone too, without
   `NVIDIA_API_KEY`.
-- Generation runs inside the save request. The Payload API route sets
-  `maxDuration = 60`, the ceiling on Vercel's Hobby plan; without it saves
-  time out after 10 s with a 504.
+- The Payload API route sets `maxDuration = 60`, the ceiling on Vercel's
+  Hobby plan; drafting streams its progress inside that one request.
 - **Self-review loop:** every draft and every chat-assistant revision is
-  checked by a second model call acting as an editor, which scores it and
-  says whether it's ready. If not, the writer gets one more turn, using the
-  editor's own words as instructions, up to 3 rounds. This is adaptive, not
-  fixed: a clean draft publishes after one quick check, a rough one gets more
-  attention. Everything (the first draft and every review-and-revise round)
-  shares one time budget so it can never add up to more than Vercel's
-  function limit; if time runs low mid-review, the loop stops and returns the
-  best draft so far rather than failing the save. Code in `src/lib/article-loop.ts`.
-- **Seeing it happened:** there's no separate button for the loop — it runs
-  automatically as part of generating or revising. The sidebar field **AI
-  self-review rounds** on each post shows how many extra passes the last
-  AI-written or AI-revised save went through (0 = approved immediately;
-  blank = no AI involved yet).
+  checked by a *different* model acting as an editor (a fixed reviewer: Gemini
+  when configured, otherwise Nemotron, or whatever `AI_JUDGE_MODEL` says; it is
+  never the model that wrote the draft). It scores the draft and says whether
+  it's ready. If not, the writer gets another turn, using the editor's own
+  words as instructions, up to 3 rounds. Everything shares one time budget so
+  it can never exceed Vercel's function limit; if time runs low the loop stops
+  with the best draft so far. Code in `src/lib/article-loop.ts`.
+- **What the review concluded** is stored on the post (sidebar): rounds, the
+  result (approved / not approved after 3 revisions / out of time / reviewer
+  unavailable / revision failed), the reviewer's last score, every round's
+  note, and which models wrote and reviewed it. If the reviewer can't be
+  reached, the draft still goes through but is marked as not reviewed. These
+  fields can't be edited through the admin or the API; only the AI flow sets
+  them.
+- Limits: the AI endpoints only work on posts you can edit, one request at a
+  time per admin, and `AI_RATE_LIMIT` (default 20) per 10 minutes.
 
 **AI assistant (chat):** below the content editor every post has an "AI
 assistant" panel. Chat with the model about the current draft — "fix the
@@ -114,17 +121,18 @@ image bytes through a serverless function.
 
 ### Admin accounts and permissions
 
-There is one **super-admin**, identified by email (`danielmwihoti@gmail.com`,
-overridable with the `SUPER_ADMIN_EMAIL` environment variable). Everyone else
-is a regular admin. Rules live in `src/lib/access.ts`.
+Each user has a **role**: *Super-admin* or *Admin* (the dropdown in the user's
+sidebar). Only a super-admin can change roles. The first account created on a
+fresh database becomes the super-admin automatically. Rules live in
+`src/lib/access.ts`.
 
 | | Super-admin | Regular admin |
 | --- | --- | --- |
 | Add, delete or unlock admin users | yes | no |
 | Edit user accounts | any | only their own (name, password) |
-| Change an email address | any except its own | no |
+| Change an email address or role | any | no |
 | Create posts | yes | yes |
-| See posts | all of them | their own and other regular admins', never the super-admin's or ownerless ones |
+| See posts | all of them | their own and other regular admins', never a super-admin's or ownerless ones |
 | Edit / delete posts | any | only their own |
 | Change a post's Owner | yes (dropdown on the post) | no |
 
@@ -142,10 +150,12 @@ is a regular admin. Rules live in `src/lib/access.ts`.
   through Payload's Local API, which bypasses access rules.
 - To add an admin, log in as the super-admin, open Users → Create New, set an
   email and password, and share the password securely.
-- The super-admin's email can't be edited in the admin, since changing it would
-  silently demote the account. If the super-admin's login email is ever
-  different from the configured one, nobody can manage users: set
-  `SUPER_ADMIN_EMAIL` in Vercel to that login email and redeploy.
+- To make someone a super-admin, open their user as a super-admin and change
+  **Role**. The last super-admin can't be demoted or deleted.
+- Databases from before roles existed have no super-admin. On startup the app
+  promotes the account whose email is `SUPER_ADMIN_EMAIL` (if set), otherwise
+  the oldest account, and logs which one. This runs only while no super-admin
+  exists, so it can't be used to take over a working site.
 
 ### Local development
 
@@ -223,7 +233,7 @@ world-view-pi.vercel.app`); the admin only shows "Something went wrong".
 | `Vercel Runtime Timeout Error: Task timed out after 10 seconds` on `PATCH /api/posts/…` | AI drafting exceeded the default function limit; the current code sets `maxDuration = 60`. Deploy the current `main`. |
 | `The model '…' has reached its end of life` | NVIDIA retired the model. The fallback list handles it; if all fail, set `NVIDIA_MODEL`. |
 | A regular admin can't find or edit a post they wrote earlier | It predates ownership tracking, so it has no owner. As the super-admin, open it and set the Owner dropdown to that admin, then save. |
-| Can't create users, or your own older posts have disappeared, after a deploy | You are logged in with an email other than the super-admin's. Set `SUPER_ADMIN_EMAIL` to your login email and redeploy. |
+| Can't create users, or your own older posts have disappeared, after a deploy | Your account isn't a super-admin. Ask a super-admin to change your Role, or, if nobody is, see "Admin accounts and permissions" above. |
 | An article or cover doesn't show up right after publishing | The cached page is being re-rendered; reload once. If it never appears, check that the post's `_status` is `published` (not just "Save draft"). |
 
 ## Getting started
@@ -244,15 +254,17 @@ stays off when unconfigured.
 | `NEXT_PUBLIC_HASHNODE_PUBLICATION_ID` | Your Hashnode publication id (optional) |
 | `NEXT_PUBLIC_HASHNODE_RSS_URL` | Public RSS feed used as a fallback when the GraphQL API is unavailable |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL used for SEO/sitemap/RSS |
-| `PAYLOAD_SECRET` | Signs admin auth tokens; required in production |
-| `SUPER_ADMIN_EMAIL` | Login email of the one account that can manage users and see every post (default `danielmwihoti@gmail.com`) |
+| `PAYLOAD_SECRET` | Signs admin auth tokens; required in production (the CMS refuses to start without it) |
+| `SUPER_ADMIN_EMAIL` | Optional: which existing account to promote if the database has no super-admin yet (otherwise the oldest account) |
 | `DATABASE_URI` | Postgres connection string for the CMS; unset = local SQLite |
 | `UPLOADTHING_TOKEN` | Media storage in production (UploadThing) |
-| `NVIDIA_API_KEY` | Enables "Draft with AI" |
+| `NVIDIA_API_KEY` | Enables "Generate draft" and the AI assistant |
 | `NVIDIA_MODEL` | Optional model override for AI drafting |
 | `NVIDIA_ENDPOINT` | Optional OpenAI-compatible chat endpoint override (tests) |
 | `GEMINI_API_KEY` | Optional backstop AI provider, used only if NVIDIA fails |
 | `GEMINI_MODEL` | Optional model override for the Gemini backstop |
+| `AI_JUDGE_MODEL` | Optional fixed reviewer for the self-review loop: an NVIDIA model id, or `gemini` / `gemini:<model>`. Default: Gemini when `GEMINI_API_KEY` is set, otherwise `nvidia/nemotron-3-super-120b-a12b`. Never the model that wrote the draft. |
+| `AI_RATE_LIMIT` | Optional: AI requests each admin may start per 10 minutes (default 20; one at a time) |
 
 > [!IMPORTANT]
 > As of **May 2026**, Hashnode's GraphQL API [requires a paid Pro plan](https://hashnode.com/changelog/2026-05-13-graphql-api-paid-access)

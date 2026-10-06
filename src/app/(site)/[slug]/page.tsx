@@ -15,6 +15,7 @@ import { getPostBySlug, getPosts } from "@/lib/requests";
 import { siteUrl } from "@/lib/env";
 import { decodeSlug, postPath } from "@/lib/post-url";
 import { readingMinutes } from "@/lib/reading-time";
+import { sanitizeArticleHtml } from "@/lib/sanitize";
 
 export const revalidate = 300;
 
@@ -73,7 +74,8 @@ export default async function BlogPostPage({ params }: Props) {
   };
 
   const category = categoryFor(post);
-  const minutes = readingMinutes(post.content.html);
+  const html = sanitizeArticleHtml(post.content.html);
+  const minutes = readingMinutes(html);
   const dateLong = post.publishedAt
     ? new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(new Date(post.publishedAt))
     : null;
@@ -184,7 +186,7 @@ export default async function BlogPostPage({ params }: Props) {
           <div
             id="article-body"
             className="blog-content has-dropcap mt-14"
-            dangerouslySetInnerHTML={{ __html: post.content.html }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
 
           <div data-reveal className="mx-auto mt-14 flex max-w-xs items-center justify-center gap-3 text-muted-foreground">

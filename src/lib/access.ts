@@ -3,8 +3,10 @@ import {
   type Access,
   type CollectionAfterChangeHook,
   type CollectionBeforeChangeHook,
+  type CollectionBeforeDeleteHook,
   type CollectionConfig,
   type FieldAccess,
+  type Payload,
   type PayloadRequest,
   type Where,
 } from "payload";
@@ -12,9 +14,9 @@ import {
 /*
  * Who may do what in the admin.
  *
- * The super-admin (SUPER_ADMIN_EMAIL) is the only account that can add,
- * delete or unlock admin users, and can update any user. It can read, edit
- * and delete every post.
+ * A super-admin (a user whose "role" is super-admin) is the only kind of
+ * account that can add, delete or unlock admin users, change anyone's role,
+ * and update any user. It can read, edit and delete every post.
  *
  * Every other admin can create posts, edit and delete only their own, and
  * read other admins' posts so they can see who is working on what (each post
@@ -26,41 +28,33 @@ import {
  * site itself reads through Payload's Local API, which bypasses access
  * control, so none of this affects what the site renders.)
  *
- * To change who the super-admin is without a code change, set the
- * SUPER_ADMIN_EMAIL environment variable.
+ * The role is stored on the user and only a super-admin can change it (see
+ * roleFieldAccess). The very first account created on a fresh database
+ * becomes super-admin; on an existing database with none, ensureSuperAdmin
+ * promotes one at startup.
  */
-export const SUPER_ADMIN_EMAIL = (
-  process.env.SUPER_ADMIN_EMAIL || "danielmwihoti@gmail.com"
-)
-  .trim()
-  .toLowerCase();
+export const SUPER_ADMIN = "super-admin";
 
-type UserLike = { id?: number | string; email?: string | null } | null | undefined;
+type UserLike = { id?: number | string; role?: string | null } | null | undefined;
 
 export function isSuperAdmin(user: UserLike): boolean {
-  return Boolean(
-    user?.email && user.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL
-  );
+  return user?.role === SUPER_ADMIN;
 }
 
-/* The super-admin's user id, looked up once per request. Null if that
- * account has not been created yet. */
-async function superAdminId(
-  req: PayloadRequest
-): Promise<number | string | null> {
-  const cache = req.context as { superAdminId?: number | string | null };
-  if (cache.superAdminId !== undefined) return cache.superAdminId;
+/* Every super-admin's user id, looked up once per request. */
+async function superAdminIds(req: PayloadRequest): Promise<(number | string)[]> {
+  const cache = req.context as { superAdminIds?: (number | string)[] };
+  if (cache.superAdminIds !== undefined) return cache.superAdminIds;
 
   const { docs } = await req.payload.find({
     collection: "users",
-    where: { email: { equals: SUPER_ADMIN_EMAIL } },
-    limit: 1,
+    where: { role: { equals: SUPER_ADMIN } },
     depth: 0,
     pagination: false,
     overrideAccess: true,
   });
-  cache.superAdminId = docs[0]?.id ?? null;
-  return cache.superAdminId;
+  cache.superAdminIds = docs.map((doc) => doc.id);
+  return cache.superAdminIds;
 }
 
 /* Documents whose owner exists and is not the super-admin. `path` is the
@@ -70,9 +64,9 @@ async function notSuperAdminOwned(
   req: PayloadRequest,
   path: string
 ): Promise<Where> {
-  const superId = await superAdminId(req);
+  const superIds = await superAdminIds(req);
   const clauses: Where[] = [{ [path]: { exists: true } }];
-  if (superId !== null) clauses.push({ [path]: { not_equals: superId } });
+  if (superIds.length > 0) clauses.push({ [path]: { not_in: superIds } });
   return { and: clauses };
 }
 
@@ -167,9 +161,8 @@ export const ownerFieldAccess: { update: FieldAccess } = {
 };
 
 /*
- * Email addresses are identities here (the super-admin is recognised by
- * email), so they are locked down: only the super-admin can change anyone's
- * email, and its own can't be changed at all, which would silently demote it.
+ * Email addresses are logins and what the post "Owner" column shows, so
+ * only a super-admin can change one.
  */
 export const guardEmailChanges: CollectionBeforeChangeHook = ({
   data,
@@ -184,18 +177,127 @@ export const guardEmailChanges: CollectionBeforeChangeHook = ({
   const after = String(data.email ?? "").trim().toLowerCase();
   if (before === after) return data;
 
-  if (before === SUPER_ADMIN_EMAIL) {
-    throw new APIError(
-      "The super-admin's email can't be changed here. To use a different " +
-        "address, set SUPER_ADMIN_EMAIL in the environment.",
-      400
-    );
-  }
   if (!isSuperAdmin(req.user)) {
-    throw new APIError("Only the super-admin can change an email address.", 403);
+    throw new APIError("Only a super-admin can change an email address.", 403);
   }
   return data;
 };
+
+/* Only a super-admin can grant or change roles. */
+export const roleFieldAccess: { create: FieldAccess; update: FieldAccess } = {
+  create: ({ req }) => isSuperAdmin(req.user),
+  update: ({ req }) => isSuperAdmin(req.user),
+};
+
+async function countSuperAdmins(req: PayloadRequest): Promise<number> {
+  const { totalDocs } = await req.payload.count({
+    collection: "users",
+    where: { role: { equals: SUPER_ADMIN } },
+    overrideAccess: true,
+    req,
+  });
+  return totalDocs;
+}
+
+/*
+ * Users beforeChange: the first account on a fresh database is the
+ * super-admin (whoever sets up the site), everyone after defaults to admin.
+ * The last super-admin can't be demoted, or nobody could manage users.
+ */
+export const guardRoles: CollectionBeforeChangeHook = async ({
+  data,
+  originalDoc,
+  operation,
+  req,
+}) => {
+  if (operation === "create") {
+    const { totalDocs } = await req.payload.count({
+      collection: "users",
+      overrideAccess: true,
+      req,
+    });
+    if (totalDocs === 0) data.role = SUPER_ADMIN;
+    else if (!data.role) data.role = "admin";
+    return data;
+  }
+  if (
+    originalDoc?.role === SUPER_ADMIN &&
+    data.role !== undefined &&
+    data.role !== SUPER_ADMIN &&
+    (await countSuperAdmins(req)) <= 1
+  ) {
+    throw new APIError(
+      "This is the only super-admin. Make someone else a super-admin first.",
+      400
+    );
+  }
+  return data;
+};
+
+export const preventDeletingLastSuperAdmin: CollectionBeforeDeleteHook = async ({
+  id,
+  req,
+}) => {
+  const user = await req.payload.findByID({
+    collection: "users",
+    id,
+    depth: 0,
+    overrideAccess: true,
+    req,
+  });
+  if (isSuperAdmin(user) && (await countSuperAdmins(req)) <= 1) {
+    throw new APIError(
+      "This is the only super-admin. Make someone else a super-admin first.",
+      400
+    );
+  }
+};
+
+/*
+ * Startup: databases from before roles existed have no super-admin. Promote
+ * the account named by SUPER_ADMIN_EMAIL if it exists, otherwise the oldest
+ * account (whoever set the site up). Does nothing once any super-admin
+ * exists, so it can't be used to take over a running site.
+ */
+export async function ensureSuperAdmin(payload: Payload): Promise<void> {
+  const existing = await payload.count({
+    collection: "users",
+    where: { role: { equals: SUPER_ADMIN } },
+    overrideAccess: true,
+  });
+  if (existing.totalDocs > 0) return;
+
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const byEmail = email
+    ? await payload.find({
+        collection: "users",
+        where: { email: { equals: email } },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      })
+    : null;
+  const oldest = byEmail?.docs[0]
+    ? null
+    : await payload.find({
+        collection: "users",
+        sort: "createdAt",
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      });
+  const target = byEmail?.docs[0] ?? oldest?.docs[0];
+  if (!target) return;
+
+  await payload.update({
+    collection: "users",
+    id: target.id,
+    data: { role: SUPER_ADMIN },
+    overrideAccess: true,
+    context: { bootstrappingSuperAdmin: true },
+  });
+  payload.logger.info(`No super-admin existed; promoted ${target.email} to super-admin.`);
+}
 
 /*
  * The AI endpoints act on a post the editor has open. When it already

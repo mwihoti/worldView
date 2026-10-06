@@ -200,6 +200,10 @@ export interface Media {
 export interface User {
   id: number;
   name: string;
+  /**
+   * Super-admins manage users and roles and can edit every post. Admins write and edit their own posts.
+   */
+  role?: ('admin' | 'super-admin') | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -348,6 +352,7 @@ export interface MediaSelect<T extends boolean = true> {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  role?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;

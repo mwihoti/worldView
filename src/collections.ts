@@ -5,7 +5,10 @@ import { revalidateSite } from "./lib/revalidate";
 import { aiAssistantHandler, aiDraftHandler } from "./lib/ai-assistant";
 import {
   guardEmailChanges,
+  guardRoles,
   ownerFieldAccess,
+  preventDeletingLastSuperAdmin,
+  roleFieldAccess,
   postAccess,
   setPostOwner,
   syncOwnerToLiveDoc,
@@ -15,13 +18,33 @@ import {
 export const Users: CollectionConfig = {
   slug: "users",
   auth: true,
-  // Email is the identity here (it is what the post "Owner" column shows and
-  // what marks the super-admin), so use it as the display title.
-  admin: { useAsTitle: "email" },
+  // Email is what the post "Owner" column shows, so use it as the title.
+  admin: { useAsTitle: "email", defaultColumns: ["email", "name", "role"] },
   access: userAccess,
-  hooks: { beforeChange: [guardEmailChanges] },
+  hooks: {
+    beforeChange: [guardEmailChanges, guardRoles],
+    beforeDelete: [preventDeletingLastSuperAdmin],
+  },
   fields: [
     { name: "name", type: "text", required: true },
+    {
+      name: "role",
+      type: "select",
+      defaultValue: "admin",
+      options: [
+        { label: "Admin", value: "admin" },
+        { label: "Super-admin", value: "super-admin" },
+      ],
+      // Only a super-admin can set or change it; anyone else's value is
+      // dropped before it reaches the database.
+      access: roleFieldAccess,
+      admin: {
+        position: "sidebar",
+        description:
+          "Super-admins manage users and roles and can edit every post. Admins " +
+          "write and edit their own posts.",
+      },
+    },
   ],
 };
 
