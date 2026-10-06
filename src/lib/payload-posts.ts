@@ -3,6 +3,7 @@ import { getPayload } from "payload";
 import { convertLexicalToHTML } from "@payloadcms/richtext-lexical/html";
 import config from "@payload-config";
 import type { Post } from "@/payload-types";
+import { lexicalPlainText } from "./lexical-text";
 import { FullPost, PostEdge, PostNode } from "./types";
 
 /*
@@ -16,25 +17,6 @@ import { FullPost, PostEdge, PostNode } from "./types";
  * its post in generateMetadata and again in the page, and for the list in
  * the related-posts strip.
  */
-
-type LexicalNode = { text?: unknown; children?: LexicalNode[]; type?: string };
-
-/* Plain text of a Lexical document, paragraphs separated by spaces. */
-export function lexicalPlainText(content: unknown, limit = 400): string {
-  const parts: string[] = [];
-  let length = 0;
-  const walk = (node: LexicalNode | undefined) => {
-    if (!node || length >= limit) return;
-    if (typeof node.text === "string") {
-      parts.push(node.text);
-      length += node.text.length;
-    }
-    node.children?.forEach(walk);
-    if (node.type === "paragraph" || node.type === "heading") parts.push(" ");
-  };
-  walk((content as { root?: LexicalNode } | null)?.root);
-  return parts.join("").replace(/\s+/g, " ").trim();
-}
 
 function toBrief(content: unknown): string {
   return lexicalPlainText(content, 300).slice(0, 240);
