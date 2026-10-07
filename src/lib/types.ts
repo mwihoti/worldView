@@ -19,6 +19,8 @@ export type PostNode = {
   publishedAt?: string | null;
   coverImage?: { url: string } | null;
   author: PostAuthor;
+  /* Section chosen in the CMS (a section slug); otherwise it's guessed. */
+  section?: string | null;
 };
 
 export type PostEdge = {
@@ -38,6 +40,8 @@ export type PostsPage = {
 
 export type FullPost = PostNode & {
   content: { html: string };
+  /* For search results and link previews, when the CMS sets one. */
+  seoDescription?: string | null;
 };
 
 export type GetPublicationResponse = {

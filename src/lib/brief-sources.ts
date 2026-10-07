@@ -213,25 +213,38 @@ export async function fetchPageText(rawUrl: string): Promise<string> {
   }
 }
 
+export type SourceStatus = { url: string; ok: true; chars: number } | { url: string; ok: false; reason: string };
+
 /*
  * Returns the brief with a "Source pages" section appended for every URL it
- * mentions, or the brief unchanged when it contains no URLs.
+ * mentions (unchanged when it has none), plus what happened to each link so
+ * the admin can see which pages the article is actually based on.
  */
-export async function expandBriefWithSources(brief: string): Promise<string> {
+export async function expandBriefWithSources(
+  brief: string
+): Promise<{ brief: string; sources: SourceStatus[] }> {
   const urls = extractUrls(brief);
-  if (urls.length === 0) return brief;
+  if (urls.length === 0) return { brief, sources: [] };
 
-  const sections = await Promise.all(
-    urls.map(async (url) => {
+  const results = await Promise.all(
+    urls.map(async (url): Promise<{ section: string; status: SourceStatus }> => {
       try {
         const text = await fetchPageText(url);
-        return `### ${url}\n${text}`;
+        return { section: `### ${url}\n${text}`, status: { url, ok: true, chars: text.length } };
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        return `### ${url}\n[Could not fetch this page: ${reason}. Do not guess its contents.]`;
+        return {
+          section: `### ${url}\n[Could not fetch this page: ${reason}. Do not guess its contents.]`,
+          status: { url, ok: false, reason },
+        };
       }
     })
   );
 
-  return `${brief}\n\nSource pages (fetched content, use as the factual basis for the article):\n\n${sections.join("\n\n")}`;
+  return {
+    brief:
+      `${brief}\n\nSource pages (fetched content, use as the factual basis for the article):\n\n` +
+      results.map((r) => r.section).join("\n\n"),
+    sources: results.map((r) => r.status),
+  };
 }

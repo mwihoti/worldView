@@ -129,9 +129,21 @@ export interface Post {
   id: number;
   title: string;
   /**
+   * One sentence shown under the headline and on story cards. “Generate draft” suggests one.
+   */
+  subtitle?: string | null;
+  /**
    * URL path of the article. Generated from the title if left empty.
    */
   slug?: string | null;
+  /**
+   * Where the story is filed on the site. Left empty, it is guessed from the author and title. “Generate draft” suggests one.
+   */
+  section?: ('world' | 'sports' | 'movies-tv' | 'technology') | null;
+  /**
+   * Shown by search engines and link previews (about 155 characters). Falls back to the summary.
+   */
+  metaDescription?: string | null;
   author: string;
   publishedAt?: string | null;
   cover?: (number | null) | Media;
@@ -308,7 +320,10 @@ export interface PayloadMigration {
  */
 export interface PostsSelect<T extends boolean = true> {
   title?: T;
+  subtitle?: T;
   slug?: T;
+  section?: T;
+  metaDescription?: T;
   author?: T;
   publishedAt?: T;
   cover?: T;

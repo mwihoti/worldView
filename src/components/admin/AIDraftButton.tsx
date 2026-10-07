@@ -14,6 +14,7 @@ import {
   applyArticleToForm,
   postAIStream,
   reviewText,
+  sourcesText,
   type AIArticle,
   type Progress,
 } from "./ai-stream";
@@ -31,6 +32,18 @@ function hasContent(value: unknown): boolean {
   return Boolean(children?.some((node) => (node.children?.length ?? 0) > 0));
 }
 
+/* "Also filled in: summary, search description" */
+function filledText(article: AIArticle): string | null {
+  const meta = article.meta;
+  if (!meta) return null;
+  const parts = [
+    meta.summary ? "summary" : null,
+    meta.metaDescription ? "search description" : null,
+    meta.section ? "section (if it was empty)" : null,
+  ].filter(Boolean);
+  return parts.length ? `Also filled in: ${parts.join(", ")}. Check them before publishing.` : null;
+}
+
 export function AIDraftButton() {
   const { config } = useConfig();
   const { id } = useDocumentInfo();
@@ -38,6 +51,7 @@ export function AIDraftButton() {
   const prompt = useFormFields(([fields]) => fields.aiPrompt?.value as string | undefined);
   const title = useFormFields(([fields]) => fields.title?.value as string | undefined);
   const content = useFormFields(([fields]) => fields.content?.value);
+  const section = useFormFields(([fields]) => fields.section?.value as string | null | undefined);
 
   const [steps, setSteps] = useState<Progress[]>([]);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -60,7 +74,7 @@ export function AIDraftButton() {
         { prompt, title, postId: id ?? null },
         (step) => setSteps((prev) => [...prev, step])
       );
-      applyArticleToForm(dispatchFields, article, title);
+      applyArticleToForm(dispatchFields, article, title, section);
       setModified(true);
       setLast(article);
       toast.success("Draft placed in the editor. Review it, then Save or Publish.");
@@ -69,7 +83,7 @@ export function AIDraftButton() {
     } finally {
       setStartedAt(null);
     }
-  }, [prompt, title, content, id, startedAt, config.routes.api, dispatchFields, setModified]);
+  }, [prompt, title, content, section, id, startedAt, config.routes.api, dispatchFields, setModified]);
 
   const busy = startedAt !== null;
   return (
@@ -91,7 +105,13 @@ export function AIDraftButton() {
         </span>
       </div>
       {busy && <AIProgress steps={steps} startedAt={startedAt} />}
-      {!busy && last && <div style={styles.review}>{reviewText(last.review)}</div>}
+      {!busy && last && (
+        <div style={styles.review}>
+          <div>{reviewText(last.review)}</div>
+          {last.sources && last.sources.length > 0 && <div>{sourcesText(last.sources)}</div>}
+          {filledText(last) && <div>{filledText(last)}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -101,6 +121,8 @@ const styles: Record<string, React.CSSProperties> = {
   row: { display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" },
   hint: { color: "var(--theme-elevation-500)", fontSize: "0.8rem" },
   review: {
+    display: "grid",
+    gap: "0.25rem",
     fontSize: "0.85rem",
     color: "var(--theme-elevation-700)",
     background: "var(--theme-elevation-50)",

@@ -43,6 +43,8 @@ const uploadthingToken = process.env.UPLOADTHING_TOKEN;
  *  - posts.owner_id / _posts_v.version_owner_id, the admin that owns a post
  *    (definitions copied from what Payload generates in dev)
  *  - users.role (and its enum type), the admin's role
+ *  - posts.subtitle / section / meta_description (and versions), the
+ *    summary, section and search description editors (or the AI) fill in
  *  - posts.ai_review_* / _posts_v.version_ai_review_*, the AI self-review
  *    summary (rounds, result, score, note, models)
  * Safe to remove once these columns are known to exist everywhere.
@@ -71,7 +73,19 @@ const SCHEMA_REPAIRS = [
    EXCEPTION WHEN duplicate_object THEN NULL;
    END $$`,
   `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "role" "enum_users_role" DEFAULT 'admin'`,
+  `DO $$ BEGIN
+     CREATE TYPE "public"."enum_posts_section" AS ENUM('world', 'sports', 'movies-tv', 'technology');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `DO $$ BEGIN
+     CREATE TYPE "public"."enum__posts_v_version_section" AS ENUM('world', 'sports', 'movies-tv', 'technology');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "section" "enum_posts_section"`,
+  `ALTER TABLE "_posts_v" ADD COLUMN IF NOT EXISTS "version_section" "enum__posts_v_version_section"`,
   ...[
+    ["subtitle", "varchar"],
+    ["meta_description", "varchar"],
     ["ai_review_rounds", "numeric"],
     ["ai_review_status", "varchar"],
     ["ai_review_score", "numeric"],
