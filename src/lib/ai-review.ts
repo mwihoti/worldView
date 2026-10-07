@@ -202,7 +202,7 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({ data, req }) => 
   const existingTitle =
     typeof data.title === "string" && data.title.trim() ? data.title.trim() : undefined;
 
-  const { title, markdown, review } = await draftArticleMarkdown(prompt, existingTitle);
+  const { title, markdown, review, meta } = await draftArticleMarkdown(prompt, existingTitle);
 
   const editorConfig = await editorConfigFactory.default({ config: req.payload.config });
   data.content = convertMarkdownToLexical({ editorConfig, markdown });
@@ -211,6 +211,9 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({ data, req }) => 
   if (!existingTitle && title) {
     data.title = title;
   }
+  if (meta?.summary) data.subtitle = meta.summary;
+  if (meta?.metaDescription) data.metaDescription = meta.metaDescription;
+  if (meta?.section && !data.section) data.section = meta.section;
   data.draftWithAI = false;
 
   return data;

@@ -208,6 +208,8 @@ export const aiDraftHandler: PayloadHandler = async (req) => {
         title: draft.title,
         markdown: draft.markdown,
         lexical,
+        meta: draft.meta,
+        sources: draft.sources,
         ...reviewPayload(req, postId, draft.review),
       },
     };

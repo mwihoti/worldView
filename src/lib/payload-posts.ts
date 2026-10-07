@@ -30,6 +30,8 @@ function toNode(doc: Post): PostNode {
   return {
     id: `payload-${doc.id}`,
     title: doc.title,
+    subtitle: doc.subtitle ?? null,
+    section: doc.section ?? null,
     slug: doc.slug ?? String(doc.id),
     brief: toBrief(doc.content),
     publishedAt: doc.publishedAt ?? doc.createdAt ?? null,
@@ -55,6 +57,8 @@ export const getPayloadPostEdges = cache(async (): Promise<PostEdge[]> => {
       depth: 1,
       select: {
         title: true,
+        subtitle: true,
+        section: true,
         slug: true,
         author: true,
         publishedAt: true,
@@ -88,7 +92,7 @@ export const getPayloadPostBySlug = cache(
       const doc = docs[0];
       if (!doc) return null;
       const html = doc.content ? convertLexicalToHTML({ data: doc.content }) : "";
-      return { ...toNode(doc), content: { html } };
+      return { ...toNode(doc), content: { html }, seoDescription: doc.metaDescription ?? null };
     } catch (error) {
       logUnavailable(error);
       return null;

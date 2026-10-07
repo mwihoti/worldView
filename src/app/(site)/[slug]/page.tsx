@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = await getPostBySlug(slug);
   if (!post) return { title: "Post not found" };
 
-  const description = post.brief || post.subtitle || undefined;
+  const description = post.seoDescription || post.subtitle || post.brief || undefined;
   const image = shareImage(post);
 
   return {
@@ -74,7 +74,7 @@ export default async function BlogPostPage({ params }: Props) {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     headline: post.title,
-    description: post.brief || post.subtitle || undefined,
+    description: post.seoDescription || post.subtitle || post.brief || undefined,
     image: [new URL(shareImage(post).url, siteUrl).toString()],
     datePublished: post.publishedAt ?? undefined,
     author: [{ "@type": "Person", name: post.author.name }],

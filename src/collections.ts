@@ -2,6 +2,7 @@ import type { CollectionConfig } from "payload";
 import { APIError } from "payload";
 import { aiReviewFields, applyReviewToken, draftWithAI } from "./lib/ai-review";
 import { revalidateSite } from "./lib/revalidate";
+import { CATEGORIES, SECTION_ORDER } from "./lib/category";
 import { aiAssistantHandler, aiDraftHandler } from "./lib/ai-assistant";
 import {
   guardEmailChanges,
@@ -164,6 +165,17 @@ export const Posts: CollectionConfig = {
       },
     },
     {
+      name: "subtitle",
+      label: "Summary",
+      type: "textarea",
+      maxLength: 300,
+      admin: {
+        rows: 2,
+        description:
+          "One sentence shown under the headline and on story cards. “Generate draft” suggests one.",
+      },
+    },
+    {
       name: "slug",
       type: "text",
       unique: true,
@@ -184,6 +196,29 @@ export const Posts: CollectionConfig = {
             return typeof raw === "string" ? slugify(raw) : value;
           },
         ],
+      },
+    },
+    {
+      name: "section",
+      type: "select",
+      options: SECTION_ORDER.map((id) => ({ label: CATEGORIES[id].label, value: CATEGORIES[id].slug })),
+      admin: {
+        position: "sidebar",
+        description:
+          "Where the story is filed on the site. Left empty, it is guessed from the author and title. " +
+          "“Generate draft” suggests one.",
+      },
+    },
+    {
+      name: "metaDescription",
+      label: "Search description",
+      type: "textarea",
+      maxLength: 200,
+      admin: {
+        position: "sidebar",
+        rows: 3,
+        description:
+          "Shown by search engines and link previews (about 155 characters). Falls back to the summary.",
       },
     },
     {

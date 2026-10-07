@@ -74,7 +74,10 @@ const KEYWORDS: [RegExp, CategoryId][] = [
 export function categoryFor(post: {
   title: string;
   author: { name: string };
+  section?: string | null;
 }): Category {
+  const chosen = categoryBySlug(post.section);
+  if (chosen) return chosen;
   const firstName = post.author.name.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
   const byAuthor = BY_AUTHOR[firstName];
   if (byAuthor) return CATEGORIES[byAuthor];

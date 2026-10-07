@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
   toast,
@@ -8,6 +8,7 @@ import {
   useDocumentInfo,
   useForm,
   useFormFields,
+  usePreferences,
 } from "@payloadcms/ui";
 import { AIProgress } from "./AIProgress";
 import {
@@ -23,6 +24,11 @@ import {
  * model about the draft; whenever the model returns a revised article the
  * panel offers to drop it into the content editor (and title). Nothing is
  * saved until the editor clicks Save/Publish, so the usual review step stays.
+ *
+ * The conversation itself is kept per admin and per post in Payload's user
+ * preferences, so a reload or a trip to another post doesn't lose it. Only
+ * the two most recent revisions keep their editor content (so they can still
+ * be applied); older ones keep their text for reading and preview.
  */
 
 type ChatTurn = {
@@ -38,6 +44,24 @@ type ChatTurn = {
   article?: AIArticle;
   applied?: boolean;
 };
+
+const MAX_SAVED_TURNS = 20;
+const APPLICABLE_SAVED_REVISIONS = 2;
+
+function forStorage(turns: ChatTurn[]): ChatTurn[] {
+  const recent = turns.slice(-MAX_SAVED_TURNS);
+  let revisions = 0;
+  return recent
+    .slice()
+    .reverse()
+    .map((turn) => {
+      if (!turn.article) return turn;
+      revisions++;
+      if (revisions <= APPLICABLE_SAVED_REVISIONS) return turn;
+      return { ...turn, article: { ...turn.article, lexical: null, token: "" } };
+    })
+    .reverse();
+}
 
 const SUGGESTIONS = [
   "Fix grammar and typos",
@@ -62,6 +86,35 @@ export function AIAssistant() {
   const [open, setOpen] = useState(true);
   const [preview, setPreview] = useState<number | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Restore this post's conversation, then save it after every change.
+  const { getPreference, setPreference } = usePreferences();
+  const prefKey = id ? `ai-chat:posts:${id}` : null;
+  const loadedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!prefKey || loadedKey.current === prefKey) return;
+    let cancelled = false;
+    getPreference<ChatTurn[] | null>(prefKey)
+      .then((saved) => {
+        if (cancelled) return;
+        loadedKey.current = prefKey;
+        if (Array.isArray(saved) && saved.length > 0) {
+          setTurns((current) => (current.length > 0 ? current : saved));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) loadedKey.current = prefKey;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prefKey, getPreference]);
+  useEffect(() => {
+    if (!prefKey || loadedKey.current !== prefKey || busy) return;
+    void setPreference(prefKey, forStorage(turns)).catch(() => {
+      // Not fatal: the chat still works, it just won't survive a reload.
+    });
+  }, [turns, busy, prefKey, setPreference]);
 
   const send = useCallback(
     async (message: string) => {
@@ -121,7 +174,7 @@ export function AIAssistant() {
   const apply = useCallback(
     (index: number) => {
       const turn = turns[index];
-      if (!turn?.article) return;
+      if (!turn?.article?.lexical) return;
       // Content, title, and the review (shown in the sidebar, stored on save).
       applyArticleToForm(dispatchFields, turn.article, title);
       setModified(true);
@@ -141,9 +194,26 @@ export function AIAssistant() {
             Ask for corrections to the draft. Apply a revision when you are happy with it, then Save or Publish.
           </div>
         </div>
-        <Button buttonStyle="secondary" size="small" type="button" onClick={() => setOpen((o) => !o)}>
-          {open ? "Hide" : "Show"}
-        </Button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {turns.length > 0 && !busy && (
+            <Button
+              buttonStyle="secondary"
+              size="small"
+              type="button"
+              onClick={() => {
+                if (window.confirm("Clear this conversation? It can't be brought back.")) {
+                  setTurns([]);
+                  setPreview(null);
+                }
+              }}
+            >
+              Clear
+            </Button>
+          )}
+          <Button buttonStyle="secondary" size="small" type="button" onClick={() => setOpen((o) => !o)}>
+            {open ? "Hide" : "Show"}
+          </Button>
+        </div>
       </div>
 
       {open && (
@@ -152,6 +222,7 @@ export function AIAssistant() {
             {turns.length === 0 && (
               <div style={styles.empty}>
                 No messages yet. Try one of the suggestions below or type your own instruction, e.g. “Make the second section about payouts more concrete”.
+                {!id && " Save the post once to keep the conversation if you reload."}
               </div>
             )}
             {turns.map((turn, i) => (
@@ -170,10 +241,14 @@ export function AIAssistant() {
                       buttonStyle="primary"
                       size="small"
                       type="button"
-                      disabled={turn.applied}
+                      disabled={turn.applied || !turn.article.lexical}
                       onClick={() => apply(i)}
                     >
-                      {turn.applied ? "Applied to editor" : "Apply to editor"}
+                      {turn.applied
+                        ? "Applied to editor"
+                        : turn.article.lexical
+                          ? "Apply to editor"
+                          : "Too old to apply"}
                     </Button>
                     <Button
                       buttonStyle="secondary"

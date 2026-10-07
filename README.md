@@ -95,6 +95,12 @@ can still set `draftWithAI: true` on save instead.)
   words as instructions, up to 3 rounds. Everything shares one time budget so
   it can never exceed Vercel's function limit; if time runs low the loop stops
   with the best draft so far. Code in `src/lib/article-loop.ts`.
+- **Fills in the rest of the post too**: alongside the article, "Generate draft"
+  suggests the **Summary** (the line under the headline and on story cards), the
+  **Search description** and the **Section** (only when none is set). The section
+  you choose always decides where the story is filed on the site; left empty it
+  is guessed from the author and title. The panel also lists which linked pages
+  were actually read and why any failed.
 - **What the review concluded** is stored on the post (sidebar): rounds, the
   result (approved / not approved after 3 revisions / out of time / reviewer
   unavailable / revision failed), the reviewer's last score, every round's
@@ -113,7 +119,10 @@ revised article; use **Preview** to read it and **Apply to editor** to replace
 the editor content (and the title, if empty). Nothing is saved until you click
 Save Draft or Publish, so you stay in control of what goes live. The panel
 talks to `POST /api/posts/ai-chat` (logged-in admins only) and uses the same
-model configuration as drafting.
+model configuration as drafting. The conversation is saved per admin and per post (in Payload's user
+preferences), so it survives a reload; **Clear** starts over. The two most
+recent revisions can still be applied after a reload; older ones can be read and
+previewed.
 
 **Media:** cover images are uploaded through the admin. Locally they land in
 `./media`; in production they are stored in [UploadThing](https://uploadthing.com)

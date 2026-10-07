@@ -7,7 +7,8 @@ import {
   type ChatMessage,
   type ModelRef,
 } from "./ai";
-import { expandBriefWithSources, extractUrls } from "./brief-sources";
+import { expandBriefWithSources, extractUrls, type SourceStatus } from "./brief-sources";
+import { describeArticle, type ArticleMeta } from "./article-meta";
 
 /*
  * Self-review loop ("loop engineering"): after a draft exists — from initial
@@ -142,6 +143,7 @@ export const OUTCOME_LABELS: Record<ReviewOutcome, string> = {
 /* Progress events, in the order they happen, for the admin UI. */
 export type LoopProgress =
   | { stage: "sources" }
+  | { stage: "sources-read"; sources: SourceStatus[] }
   | { stage: "drafting" }
   | { stage: "reviewing"; round: number }
   | { stage: "revising"; round: number; score: number | null; feedback: string }
@@ -323,14 +325,21 @@ export async function draftArticleMarkdown(
   prompt: string,
   existingTitle?: string,
   { onProgress }: { onProgress?: ProgressFn } = {}
-): Promise<{ title: string | null; markdown: string; review: ReviewSummary }> {
+): Promise<{
+  title: string | null;
+  markdown: string;
+  review: ReviewSummary;
+  sources: SourceStatus[];
+  meta: ArticleMeta | null;
+}> {
   const started = Date.now();
   const rawBrief = existingTitle
     ? `Working title: ${existingTitle}\n\nBrief: ${prompt}`
     : `Brief: ${prompt}`;
   // Pull in the text of any pages the brief links to; the model can't browse.
   if (extractUrls(rawBrief).length > 0) onProgress?.({ stage: "sources" });
-  const brief = await expandBriefWithSources(rawBrief);
+  const { brief, sources } = await expandBriefWithSources(rawBrief);
+  if (sources.length > 0) onProgress?.({ stage: "sources-read", sources });
 
   const history: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -343,12 +352,20 @@ export async function draftArticleMarkdown(
     exclude: reserved ? [reserved] : [],
   });
 
+  // Summary, meta description and section, worked out from the first draft
+  // while the review loop runs; revisions polish wording, not the topic.
+  const metaPromise = describeArticle(
+    draft.text,
+    Math.min(15_000, TOTAL_REQUEST_BUDGET_MS - (Date.now() - started) - 2_000)
+  );
+
   const remaining = TOTAL_REQUEST_BUDGET_MS - (Date.now() - started);
   const { markdown: refined, review } = await refineArticle(history, draft.text, {
     budgetMs: remaining,
     writer: draft.ref,
     onProgress,
   });
+  const meta = await metaPromise;
   onProgress?.({ stage: "done", review });
-  return { ...splitTitle(refined), review };
+  return { ...splitTitle(refined), review, sources, meta };
 }
