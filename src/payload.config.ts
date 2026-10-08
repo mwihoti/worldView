@@ -181,6 +181,8 @@ export default buildConfig({
         Logo: "/components/admin/BrandMark#AdminLogo",
         Icon: "/components/admin/BrandMark#AdminIcon",
       },
+      // Light/dark switch in the app header, on every admin screen.
+      actions: ["/components/admin/ThemeToggle#ThemeToggle"],
     },
     meta: {
       titleSuffix: " · WorldView Admin",

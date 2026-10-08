@@ -25,6 +25,7 @@ import { ItalicFeatureClient as ItalicFeatureClient_e70f5e05f09f93e00b997edb1ef0
 import { AIAssistant as AIAssistant_f6c7201369f29ef0cfadbed9901b16a4 } from '../../../components/admin/AIAssistant'
 import { AdminIcon as AdminIcon_924c42c084cf7b302bf839ef91e28283 } from '../../../components/admin/BrandMark'
 import { AdminLogo as AdminLogo_924c42c084cf7b302bf839ef91e28283 } from '../../../components/admin/BrandMark'
+import { ThemeToggle as ThemeToggle_fc85bd5ac375c29cf24795ab8778bf43 } from '../../../components/admin/ThemeToggle'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 import { UploadthingClientUploadHandler as UploadthingClientUploadHandler_749dcaa11bb61b873d113cb6c609bc10 } from '@payloadcms/storage-uploadthing/client'
 
@@ -57,6 +58,7 @@ export const importMap = {
   "/components/admin/AIAssistant#AIAssistant": AIAssistant_f6c7201369f29ef0cfadbed9901b16a4,
   "/components/admin/BrandMark#AdminIcon": AdminIcon_924c42c084cf7b302bf839ef91e28283,
   "/components/admin/BrandMark#AdminLogo": AdminLogo_924c42c084cf7b302bf839ef91e28283,
+  "/components/admin/ThemeToggle#ThemeToggle": ThemeToggle_fc85bd5ac375c29cf24795ab8778bf43,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
   "@payloadcms/storage-uploadthing/client#UploadthingClientUploadHandler": UploadthingClientUploadHandler_749dcaa11bb61b873d113cb6c609bc10
 }
