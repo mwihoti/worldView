@@ -5,7 +5,7 @@
  * scripts/generate-covers.mjs) to publish a new set under fresh URLs.
  * Dependency-free so that script can import it directly.
  */
-export const COVER_VERSION = "v3";
+export const COVER_VERSION = "v2";
 
 export function coverUrl(cover: string): string {
   const file = cover.split("/").pop() ?? cover;
