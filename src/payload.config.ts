@@ -175,6 +175,13 @@ export default buildConfig({
     user: "users",
     // Custom admin components are referenced by paths relative to this dir.
     importMap: { baseDir: path.resolve(dirname) },
+    components: {
+      graphics: {
+        // The WorldView brand on the sign-in / first-signup screens and nav.
+        Logo: "/components/admin/BrandMark#AdminLogo",
+        Icon: "/components/admin/BrandMark#AdminIcon",
+      },
+    },
     meta: {
       titleSuffix: " · WorldView Admin",
     },

@@ -1,0 +1,138 @@
+/*
+ * Field-notebook theme for the Payload admin — the same look as the public
+ * site (see src/app/globals.css): warm paper with a faint grain, ink
+ * outlines, hard offset shadows, Fraunces headlines, a handwritten accent.
+ *
+ * Payload derives every surface and text colour from the --color-base-*
+ * ramp (and its accent from --color-success-*), and its dark mode remaps
+ * the same ramps, so overriding the ramps re-skins both modes at once.
+ * Targeted rules below are kept few and shallow so admin screens built
+ * from deeper Payload internals keep working untouched.
+ */
+
+:root {
+    --color-base-0: rgb(251, 247, 238);
+    --color-base-50: rgb(240, 236, 227);
+    --color-base-100: rgb(228, 225, 216);
+    --color-base-150: rgb(217, 213, 205);
+    --color-base-200: rgb(206, 202, 194);
+    --color-base-250: rgb(194, 191, 183);
+    --color-base-300: rgb(183, 180, 172);
+    --color-base-350: rgb(172, 169, 161);
+    --color-base-400: rgb(161, 157, 150);
+    --color-base-450: rgb(149, 146, 139);
+    --color-base-500: rgb(138, 135, 128);
+    --color-base-550: rgb(127, 124, 118);
+    --color-base-600: rgb(115, 113, 107);
+    --color-base-650: rgb(104, 101, 96);
+    --color-base-700: rgb(93, 90, 85);
+    --color-base-750: rgb(82, 79, 74);
+    --color-base-800: rgb(70, 68, 63);
+    --color-base-850: rgb(59, 57, 52);
+    --color-base-900: rgb(48, 45, 41);
+    --color-base-950: rgb(36, 34, 30);
+    --color-base-1000: rgb(25, 23, 19);
+    --color-success-50: rgb(246, 219, 209);
+    --color-success-100: rgb(239, 200, 188);
+    --color-success-150: rgb(233, 181, 167);
+    --color-success-200: rgb(227, 162, 146);
+    --color-success-250: rgb(221, 143, 125);
+    --color-success-300: rgb(214, 124, 104);
+    --color-success-350: rgb(208, 106, 83);
+    --color-success-400: rgb(202, 87, 62);
+    --color-success-450: rgb(196, 68, 41);
+    --color-success-500: rgb(188, 51, 23);
+    --color-success-550: rgb(172, 47, 21);
+    --color-success-600: rgb(156, 43, 20);
+    --color-success-650: rgb(140, 39, 19);
+    --color-success-700: rgb(124, 35, 17);
+    --color-success-750: rgb(108, 31, 16);
+    --color-success-800: rgb(92, 28, 14);
+    --color-success-850: rgb(76, 24, 13);
+    --color-success-900: rgb(60, 20, 11);
+    --color-success-950: rgb(44, 16, 10);
+  --style-radius-s: 6px;
+  --style-radius-m: 10px;
+  --style-radius-l: 14px;
+  --font-body: var(--font-admin-ui), system-ui, sans-serif;
+  --wv-ink: var(--theme-elevation-800);
+  --wv-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+body {
+  background-image: var(--wv-grain);
+  background-size: 180px 180px;
+}
+
+/* Headlines in the display face, like the public site. */
+h1,
+h2,
+h3,
+.login__brand,
+.nav__label {
+  font-family: var(--font-admin-display), Georgia, serif;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  letter-spacing: -0.01em;
+}
+
+/* Primary buttons as ink-outlined stickers. */
+.btn--style-primary {
+  border: 2px solid var(--wv-ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--wv-ink);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn--style-primary:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--wv-ink);
+}
+.btn--style-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--wv-ink);
+}
+.btn--style-secondary {
+  border-radius: 999px;
+}
+
+/* The sign-in and first-signup screens: the form sits on a sticker card. */
+.template-minimal__wrap {
+  background: var(--theme-elevation-0);
+  border: 2px solid var(--wv-ink);
+  border-radius: var(--style-radius-l);
+  box-shadow: 6px 6px 0 var(--wv-ink);
+  padding: 2.2rem;
+}
+.template-minimal__wrap input {
+  background: var(--theme-bg);
+  border-width: 1.5px;
+  border-radius: var(--style-radius-s);
+}
+.create-first-user h1,
+.login h1 {
+  font-size: 1.9rem;
+}
+/* The signup screen has no logo slot (the login screen's Logo override
+ * covers that one), so it gets its handwritten note from here. */
+.create-first-user h1::after {
+  content: 'the writing desk';
+  display: block;
+  font-family: var(--font-admin-note), cursive;
+  font-size: 1.35rem;
+  font-weight: 400;
+  font-variation-settings: normal;
+  letter-spacing: 0;
+  color: var(--theme-elevation-500);
+  margin-top: 0.15rem;
+}
+
+/* Dashboard cards pick up a light sticker treatment too. */
+.dashboard .card {
+  border: 2px solid var(--wv-ink);
+  border-radius: var(--style-radius-l);
+  box-shadow: 4px 4px 0 var(--wv-ink);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.dashboard .card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--wv-ink);
+}
