@@ -2,28 +2,35 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Mail } from "lucide-react";
+import { Input } from "./ui/input";
 import { subscribeToNewsletterAction } from "@/lib/actions";
 
-/* Newsletter sign-up, opened by the masthead's Subscribe button. */
 export default function NewsletterCard() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    const show = () => setOpen(true);
-    window.addEventListener("wv:subscribe", show);
-    return () => window.removeEventListener("wv:subscribe", show);
+    const timer = setTimeout(() => {
+      if (!localStorage.getItem("newsletter")) setOpen(true);
+    }, 5000);
+    return () => clearTimeout(timer);
   }, []);
 
   function handleSubscribe() {
     startTransition(async () => {
       const result = await subscribeToNewsletterAction(email);
       if (result.ok) {
+        localStorage.setItem("newsletter", email);
         toast.success(result.message);
         setOpen(false);
-        setEmail("");
       } else {
         toast.error(result.message);
       }
@@ -32,40 +39,45 @@ export default function NewsletterCard() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="gap-0 overflow-hidden rounded-[var(--radius)] border border-border p-0 sm:max-w-md">
-        <div className="masthead px-7 pb-6 pt-7">
-          <p className="kicker !text-masthead-accent">Newsletter</p>
-          <DialogHeader className="mt-2 text-left">
-            <DialogTitle className="headline text-3xl text-masthead-foreground">The WorldView briefing</DialogTitle>
-            <DialogDescription className="mt-2 text-[0.95rem] text-masthead-foreground/80">
-              The best new stories, straight to your inbox. No spam, unsubscribe any time.
-            </DialogDescription>
+      <DialogContent className="sticker gap-0 overflow-hidden border-2 border-ink p-0 sm:rounded-[var(--radius)]">
+        <div className="relative border-b-2 border-ink bg-primary px-6 pb-5 pt-7 text-primary-foreground">
+          <Mail
+            className="wiggle absolute right-14 top-5 h-12 w-12 opacity-90"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+          <p className="font-hand text-2xl leading-none opacity-90">psst &mdash; before you go</p>
+          <DialogHeader className="mt-1 text-left">
+            <DialogTitle className="font-display text-3xl font-bold leading-tight">
+              Join the newsletter
+            </DialogTitle>
           </DialogHeader>
         </div>
-        <form
-          className="flex flex-col gap-3 p-7"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubscribe();
-          }}
-        >
-          <label htmlFor="newsletter-email" className="text-sm font-medium">
-            Email address
-          </label>
-          <input
-            id="newsletter-email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-[var(--radius)] border border-input bg-background px-3 text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <button type="submit" className="btn mt-1" disabled={isPending}>
-            {isPending ? "Subscribing…" : "Subscribe"}
-          </button>
-        </form>
+        <div className="p-6">
+          <p className="text-muted-foreground">
+            Enter your email to join the newsletter and stay up to date with the
+            latest posts published in this blog!
+          </p>
+          <div className="mt-5 flex flex-col gap-4">
+            <Input
+              type="email"
+              placeholder="you@example.com"
+              aria-label="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubscribe()}
+              className="h-11 rounded-lg border-2 border-ink bg-background text-base"
+            />
+            <button
+              type="button"
+              className="btn-ink justify-center"
+              onClick={handleSubscribe}
+              disabled={isPending}
+            >
+              {isPending ? "Sending\u2026" : "Subscribe"}
+            </button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

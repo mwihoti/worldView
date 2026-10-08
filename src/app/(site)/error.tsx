@@ -15,13 +15,16 @@ export default function Error({
   }, [error]);
 
   return (
-    <main id="main" className="wrap flex flex-col items-center py-28 text-center">
-      <p className="kicker">Something went wrong</p>
-      <h1 className="headline mt-3 text-4xl sm:text-5xl">We couldn&apos;t load this page</h1>
-      <p className="mt-4 max-w-md text-lg text-muted-foreground">
-        Give it another try. If it keeps happening, it&apos;s on us.
+    <main id="main" className="wrap my-20 flex flex-col items-center gap-5 text-center">
+      <p className="font-hand text-3xl text-primary">oops &mdash; that wasn&apos;t supposed to happen</p>
+      <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
+        Something went wrong
+      </h1>
+      <p className="max-w-md text-lg text-muted-foreground">
+        We couldn&apos;t load this page. Give it another try; if it keeps
+        happening, it&apos;s on us.
       </p>
-      <button type="button" onClick={reset} className="btn mt-8">
+      <button type="button" onClick={reset} className="btn-ink">
         <RotateCw className="h-4 w-4" aria-hidden="true" /> Try again
       </button>
     </main>
