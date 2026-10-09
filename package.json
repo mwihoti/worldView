@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint src",
     "payload": "payload",
-    "test": "vitest run"
+    "test": "vitest run",
+    "export:training": "tsx scripts/export-training-data.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "^3.90.2",
@@ -52,6 +53,7 @@
     "graphql": "^16.14.2",
     "postcss": "^8",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.0.3"
   },

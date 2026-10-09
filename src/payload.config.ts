@@ -47,6 +47,7 @@ const uploadthingToken = process.env.UPLOADTHING_TOKEN;
  *    summary, section and search description editors (or the AI) fill in
  *  - posts.ai_review_* / _posts_v.version_ai_review_*, the AI self-review
  *    summary (rounds, result, score, note, models)
+ *  - posts.ai_style (and its enum type), what kind of piece the AI writes
  * Safe to remove once these columns are known to exist everywhere.
  */
 const SCHEMA_REPAIRS = [
@@ -83,6 +84,16 @@ const SCHEMA_REPAIRS = [
    END $$`,
   `ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "section" "enum_posts_section"`,
   `ALTER TABLE "_posts_v" ADD COLUMN IF NOT EXISTS "version_section" "enum__posts_v_version_section"`,
+  `DO $$ BEGIN
+     CREATE TYPE "public"."enum_posts_ai_style" AS ENUM('news-report', 'feature', 'match-report', 'review', 'explainer', 'opinion', 'listicle');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `DO $$ BEGIN
+     CREATE TYPE "public"."enum__posts_v_version_ai_style" AS ENUM('news-report', 'feature', 'match-report', 'review', 'explainer', 'opinion', 'listicle');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "ai_style" "enum_posts_ai_style"`,
+  `ALTER TABLE "_posts_v" ADD COLUMN IF NOT EXISTS "version_ai_style" "enum__posts_v_version_ai_style"`,
   ...[
     ["subtitle", "varchar"],
     ["meta_description", "varchar"],

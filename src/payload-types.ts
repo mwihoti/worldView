@@ -148,6 +148,10 @@ export interface Post {
   publishedAt?: string | null;
   cover?: (number | null) | Media;
   /**
+   * What kind of piece the AI should write — it shapes both the writing and the review, and your own published articles in the same style are shown to the model as examples. Left empty, the house default is used.
+   */
+  aiStyle?: ('news-report' | 'feature' | 'match-report' | 'review' | 'explainer' | 'opinion' | 'listicle') | null;
+  /**
    * Describe the article you want (topic, angle, length, tone), then click “Generate draft”. Links to pages are read and used as sources.
    */
   aiPrompt?: string | null;
@@ -327,6 +331,7 @@ export interface PostsSelect<T extends boolean = true> {
   author?: T;
   publishedAt?: T;
   cover?: T;
+  aiStyle?: T;
   aiPrompt?: T;
   draftWithAI?: T;
   content?: T;
