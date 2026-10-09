@@ -3,6 +3,7 @@ import { APIError } from "payload";
 import { aiReviewFields, applyReviewToken, draftWithAI } from "./lib/ai-review";
 import { revalidateSite } from "./lib/revalidate";
 import { CATEGORIES, SECTION_ORDER } from "./lib/category";
+import { ARTICLE_STYLES } from "./lib/article-styles";
 import { aiAssistantHandler, aiDraftHandler } from "./lib/ai-assistant";
 import {
   guardEmailChanges,
@@ -244,6 +245,18 @@ export const Posts: CollectionConfig = {
       type: "upload",
       relationTo: "media",
       admin: { position: "sidebar" },
+    },
+    {
+      name: "aiStyle",
+      label: "Article style",
+      type: "select",
+      options: ARTICLE_STYLES.map(({ id, label }) => ({ label, value: id })),
+      admin: {
+        description:
+          "What kind of piece the AI should write — it shapes both the writing and the review, " +
+          "and your own published articles in the same style are shown to the model as examples. " +
+          "Left empty, the house default is used.",
+      },
     },
     {
       name: "aiPrompt",

@@ -10,6 +10,7 @@ import {
   editorConfigFactory,
 } from "@payloadcms/richtext-lexical";
 import { draftArticleMarkdown, OUTCOME_LABELS, type ReviewSummary } from "./article-loop";
+import { articleStyle, fetchStyleExamples } from "./article-styles";
 
 /*
  * What the self-review loop concluded about a post's current AI-written
@@ -202,7 +203,12 @@ export const draftWithAI: CollectionBeforeChangeHook = async ({ data, req }) => 
   const existingTitle =
     typeof data.title === "string" && data.title.trim() ? data.title.trim() : undefined;
 
-  const { title, markdown, review, meta } = await draftArticleMarkdown(prompt, existingTitle);
+  const style = articleStyle(typeof data.aiStyle === "string" ? data.aiStyle : undefined);
+  const examples = style ? await fetchStyleExamples(req.payload, style.id, data.id) : [];
+  const { title, markdown, review, meta } = await draftArticleMarkdown(prompt, existingTitle, {
+    style,
+    examples,
+  });
 
   const editorConfig = await editorConfigFactory.default({ config: req.payload.config });
   data.content = convertMarkdownToLexical({ editorConfig, markdown });

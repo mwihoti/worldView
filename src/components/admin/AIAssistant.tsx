@@ -76,6 +76,7 @@ export function AIAssistant() {
   const { dispatchFields, setModified } = useForm();
   const title = useFormFields(([fields]) => fields.title?.value as string | undefined);
   const brief = useFormFields(([fields]) => fields.aiPrompt?.value as string | undefined);
+  const style = useFormFields(([fields]) => fields.aiStyle?.value as string | null | undefined);
   const content = useFormFields(([fields]) => fields.content?.value);
 
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -135,6 +136,7 @@ export function AIAssistant() {
             })),
             title,
             brief,
+            style: style ?? null,
             content,
             postId: id ?? null,
           },
@@ -168,7 +170,7 @@ export function AIAssistant() {
         }, 0);
       }
     },
-    [busy, turns, config.routes.api, title, brief, content, id]
+    [busy, turns, config.routes.api, title, brief, style, content, id]
   );
 
   const apply = useCallback(

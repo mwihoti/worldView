@@ -52,6 +52,7 @@ export function AIDraftButton() {
   const title = useFormFields(([fields]) => fields.title?.value as string | undefined);
   const content = useFormFields(([fields]) => fields.content?.value);
   const section = useFormFields(([fields]) => fields.section?.value as string | null | undefined);
+  const style = useFormFields(([fields]) => fields.aiStyle?.value as string | null | undefined);
 
   const [steps, setSteps] = useState<Progress[]>([]);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -71,7 +72,7 @@ export function AIDraftButton() {
     try {
       const { article } = await postAIStream<{ article: AIArticle }>(
         `${config.routes.api}/posts/ai-draft`,
-        { prompt, title, postId: id ?? null },
+        { prompt, title, style: style ?? null, postId: id ?? null },
         (step) => setSteps((prev) => [...prev, step])
       );
       applyArticleToForm(dispatchFields, article, title, section);
@@ -83,7 +84,7 @@ export function AIDraftButton() {
     } finally {
       setStartedAt(null);
     }
-  }, [prompt, title, content, section, id, startedAt, config.routes.api, dispatchFields, setModified]);
+  }, [prompt, title, content, section, style, id, startedAt, config.routes.api, dispatchFields, setModified]);
 
   const busy = startedAt !== null;
   return (

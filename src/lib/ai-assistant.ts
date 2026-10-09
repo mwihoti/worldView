@@ -15,6 +15,7 @@ import {
   type LoopProgress,
   type ReviewSummary,
 } from "./article-loop";
+import { articleStyle, fetchStyleExamples } from "./article-styles";
 import { assertCanEditPost } from "./access";
 import { issueReviewToken, reviewStatusText } from "./ai-review";
 import { acquireAISlot } from "./rate-limit";
@@ -70,6 +71,7 @@ const chatSchema = z.object({
   // Form fields arrive as null when empty.
   title: z.string().max(500).nullish(),
   brief: z.string().max(20_000).nullish(),
+  style: z.string().max(40).nullish(),
   content: z.unknown().nullish(),
   postId: postIdSchema,
 });
@@ -77,6 +79,7 @@ const chatSchema = z.object({
 const draftSchema = z.object({
   prompt: z.string().max(20_000).nullish(),
   title: z.string().max(500).nullish(),
+  style: z.string().max(40).nullish(),
   postId: postIdSchema,
 });
 
@@ -194,13 +197,19 @@ function reviewPayload(req: PayloadRequest, postId: unknown, review: ReviewSumma
 
 export const aiDraftHandler: PayloadHandler = async (req) => {
   if (!req.user) throw new APIError("You must be logged in to use the AI assistant.", 401);
-  const { prompt, title, postId } = await parseBody(req, draftSchema);
+  const { prompt, title, style: styleId, postId } = await parseBody(req, draftSchema);
   const brief = prompt?.trim();
   if (!brief) throw new APIError("Fill in “AI prompt” first.", 400);
 
   return streamAIWork(req, postId, async (emit) => {
     const existingTitle = title?.trim() || undefined;
-    const draft = await draftArticleMarkdown(brief, existingTitle, { onProgress: emit });
+    const style = articleStyle(styleId);
+    const examples = style ? await fetchStyleExamples(req.payload, style.id, postId) : [];
+    const draft = await draftArticleMarkdown(brief, existingTitle, {
+      onProgress: emit,
+      style,
+      examples,
+    });
     const editorConfig = await editorConfigFactory.default({ config: req.payload.config });
     const lexical = convertMarkdownToLexical({ editorConfig, markdown: draft.markdown });
     return {
@@ -218,7 +227,11 @@ export const aiDraftHandler: PayloadHandler = async (req) => {
 
 export const aiAssistantHandler: PayloadHandler = async (req) => {
   if (!req.user) throw new APIError("You must be logged in to use the AI assistant.", 401);
-  const { messages, title, brief, content, postId } = await parseBody(req, chatSchema);
+  const { messages, title, brief, style: styleId, content, postId } = await parseBody(
+    req,
+    chatSchema
+  );
+  const style = articleStyle(styleId);
 
   return streamAIWork(req, postId, async (emit) => {
     const editorConfig = await editorConfigFactory.default({
@@ -236,6 +249,7 @@ export const aiAssistantHandler: PayloadHandler = async (req) => {
 
     const context = [
       title ? `Working title: ${title}` : null,
+      style ? `Article style: ${style.label}. ${style.writer}` : null,
       brief ? `Original brief from the editor:\n${brief}` : null,
       currentArticle
         ? `Current article (markdown):\n${currentArticle}`
@@ -280,6 +294,7 @@ export const aiAssistantHandler: PayloadHandler = async (req) => {
       maxTokens: 3000,
       budgetMs: remaining,
       writer: answer.ref,
+      style,
       onProgress: emit,
     });
 

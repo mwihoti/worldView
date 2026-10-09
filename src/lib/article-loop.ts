@@ -9,6 +9,7 @@ import {
 } from "./ai";
 import { expandBriefWithSources, extractUrls, type SourceStatus } from "./brief-sources";
 import { describeArticle, type ArticleMeta } from "./article-meta";
+import { exampleBlock, type ArticleStyle } from "./article-styles";
 
 /*
  * Self-review loop ("loop engineering"): after a draft exists — from initial
@@ -53,9 +54,13 @@ const JUDGE_BUDGET_MS = 12_000;
 export const MAX_ROUNDS = 3;
 const READY_SCORE = 8;
 
-const JUDGE_SYSTEM_PROMPT = `You are a strict but fair editor reviewing a draft news article for WorldView before publication.
+/* The style's extra criteria (if any) slot in between the general criteria
+ * and the output-format instruction, so the format demand stays last — the
+ * position models obey it from most reliably. */
+const judgeSystemPrompt = (style?: ArticleStyle) =>
+  `You are a strict but fair editor reviewing a draft news article for WorldView before publication.
 
-Score it 1-10 on: factual grounding (nothing invented beyond what the brief/conversation supports), clarity, structure (subheadings and paragraphing used well), and whether it reads as a finished piece rather than a rough draft.
+Score it 1-10 on: factual grounding (nothing invented beyond what the brief/conversation supports), clarity, structure (subheadings and paragraphing used well), and whether it reads as a finished piece rather than a rough draft.${style ? `\n\n${style.judge}` : ""}
 
 Reply with ONLY a single JSON object and nothing else, in exactly this shape:
 {"score": <integer 1-10>, "ready": <true or false>, "feedback": "<one or two sentences on the single most important thing to fix, or empty if ready>"}`;
@@ -158,7 +163,8 @@ type JudgeResult =
 async function judge(
   articleMarkdown: string,
   writer: ModelRef | null,
-  budgetMs: number
+  budgetMs: number,
+  style?: ArticleStyle
 ): Promise<JudgeResult> {
   const candidates = judgeCandidates(writer);
   if (candidates.length === 0) {
@@ -167,7 +173,7 @@ async function judge(
   try {
     const { text, ref } = await chatCompletionWithModel(
       [
-        { role: "system", content: JUDGE_SYSTEM_PROMPT },
+        { role: "system", content: judgeSystemPrompt(style) },
         { role: "user", content: articleMarkdown },
       ],
       { maxTokens: 300, budgetMs, candidates }
@@ -207,11 +213,13 @@ export async function refineArticle(
     maxTokens = 4096,
     budgetMs = TOTAL_REQUEST_BUDGET_MS - INITIAL_DRAFT_BUDGET_MS,
     writer = null,
+    style,
     onProgress,
   }: {
     maxTokens?: number;
     budgetMs?: number;
     writer?: ModelRef | null;
+    style?: ArticleStyle;
     onProgress?: ProgressFn;
   } = {}
 ): Promise<RefineResult> {
@@ -239,7 +247,7 @@ export async function refineArticle(
     }
 
     onProgress?.({ stage: "reviewing", round: rounds + 1 });
-    const result = await judge(current, currentWriter, Math.min(JUDGE_BUDGET_MS, remaining));
+    const result = await judge(current, currentWriter, Math.min(JUDGE_BUDGET_MS, remaining), style);
     if (result.status === "unavailable") {
       outcome = "judge-unavailable";
       detail = result.detail;
@@ -312,19 +320,27 @@ export async function refineArticle(
   };
 }
 
-const SYSTEM_PROMPT = `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
+/* The style's instructions and example articles live in the system message
+ * rather than extra chat turns, so the history keeps its simple
+ * system-then-brief shape that refineArticle appends to. */
+const systemPrompt = (style?: ArticleStyle, examples: string[] = []) =>
+  `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
-Write a complete, publishable article based on the brief you are given. Ground the article in what the brief provides; do not invent quotes, statistics, or events the brief doesn't support — for topics that depend on very recent events, write from the brief alone and stay general where it is silent.
+Write a complete, publishable article based on the brief you are given. Ground the article in what the brief provides; do not invent quotes, statistics, or events the brief doesn't support — for topics that depend on very recent events, write from the brief alone and stay general where it is silent.${style ? `\n\n${style.writer}` : ""}
 
 Format your response exactly like this:
 - First line: the article title as a level-1 markdown heading (# Title)
 - Then the article body in markdown, using ## subheadings, short paragraphs, and lists where they help.
-- No preamble, no commentary about the writing process — output only the article.`;
+- No preamble, no commentary about the writing process — output only the article.${exampleBlock(examples)}`;
 
 export async function draftArticleMarkdown(
   prompt: string,
   existingTitle?: string,
-  { onProgress }: { onProgress?: ProgressFn } = {}
+  {
+    onProgress,
+    style,
+    examples = [],
+  }: { onProgress?: ProgressFn; style?: ArticleStyle; examples?: string[] } = {}
 ): Promise<{
   title: string | null;
   markdown: string;
@@ -342,7 +358,7 @@ export async function draftArticleMarkdown(
   if (sources.length > 0) onProgress?.({ stage: "sources-read", sources });
 
   const history: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt(style, examples) },
     { role: "user", content: brief },
   ];
   onProgress?.({ stage: "drafting" });
@@ -363,6 +379,7 @@ export async function draftArticleMarkdown(
   const { markdown: refined, review } = await refineArticle(history, draft.text, {
     budgetMs: remaining,
     writer: draft.ref,
+    style,
     onProgress,
   });
   const meta = await metaPromise;

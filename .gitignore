@@ -40,3 +40,4 @@ next-env.d.ts
 worldview.db
 /media
 .env
+training-data/
