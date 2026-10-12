@@ -10,6 +10,7 @@ import {
 import { expandBriefWithSources, extractUrls, type SourceStatus } from "./brief-sources";
 import { describeArticle, type ArticleMeta } from "./article-meta";
 import { exampleBlock, type ArticleStyle } from "./article-styles";
+import { WRITING_GUIDE, WRITING_JUDGE_CRITERIA } from "./writing-guide";
 
 /*
  * Self-review loop ("loop engineering"): after a draft exists — from initial
@@ -54,13 +55,16 @@ const JUDGE_BUDGET_MS = 12_000;
 export const MAX_ROUNDS = 3;
 const READY_SCORE = 8;
 
-/* The style's extra criteria (if any) slot in between the general criteria
- * and the output-format instruction, so the format demand stays last — the
- * position models obey it from most reliably. */
+/* The style's extra criteria (if any) and the house writing standard slot in
+ * between the general criteria and the output-format instruction, so the
+ * format demand stays last — the position models obey it from most
+ * reliably. */
 const judgeSystemPrompt = (style?: ArticleStyle) =>
   `You are a strict but fair editor reviewing a draft news article for WorldView before publication.
 
 Score it 1-10 on: factual grounding (nothing invented beyond what the brief/conversation supports), clarity, structure (subheadings and paragraphing used well), and whether it reads as a finished piece rather than a rough draft.${style ? `\n\n${style.judge}` : ""}
+
+${WRITING_JUDGE_CRITERIA}
 
 Reply with ONLY a single JSON object and nothing else, in exactly this shape:
 {"score": <integer 1-10>, "ready": <true or false>, "feedback": "<one or two sentences on the single most important thing to fix, or empty if ready>"}`;
@@ -327,6 +331,8 @@ const systemPrompt = (style?: ArticleStyle, examples: string[] = []) =>
   `You are a staff writer for WorldView, a news blog covering world news, sports, movies & TV, and tech.
 
 Write a complete, publishable article based on the brief you are given. Ground the article in what the brief provides; do not invent quotes, statistics, or events the brief doesn't support — for topics that depend on very recent events, write from the brief alone and stay general where it is silent.${style ? `\n\n${style.writer}` : ""}
+
+${WRITING_GUIDE}
 
 Format your response exactly like this:
 - First line: the article title as a level-1 markdown heading (# Title)
