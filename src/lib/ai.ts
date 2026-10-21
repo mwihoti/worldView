@@ -19,22 +19,29 @@ import { APIError } from "payload";
  */
 
 // NVIDIA retires models regularly (openai/gpt-oss-120b went end-of-life on
-// 2026-09-03). List the current catalog at
-// https://integrate.api.nvidia.com/v1/models. NVIDIA_MODEL is tried first;
-// when a model answers 404/410 (retired) the next one in this list is tried.
+// 2026-09-03; kimi-k3 and deepseek-v4-flash-0731 vanished by 2026-10-21).
+// List the current catalog at https://integrate.api.nvidia.com/v1/models —
+// but note the listing is not proof of access: nemotron-3-super-120b-a12b
+// was still listed while every invoke answered 404 "Function not found for
+// account". Verify a candidate with a real completion before adding it.
+// NVIDIA_MODEL is tried first; when a model answers 404/410 (retired) the
+// next one in this list is tried. Order is fastest-verified first
+// (2026-10-21: ultra ~1.3s, lightning ~2.2s, gpt-oss-20b worked but took
+// ~36s from cold, deepseek timed out at 30s).
 export const FALLBACK_MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
   "openai/gpt-oss-20b",
-  "nvidia/nemotron-3-super-120b-a12b",
-  "moonshotai/kimi-k3",
-  "deepseek-ai/deepseek-v4-flash-0731",
+  "deepseek-ai/deepseek-v4.1-flash",
 ];
 
 /*
  * The self-review judge's preferred NVIDIA model when Gemini isn't available
  * to act as an independent reviewer (see judgeCandidates). A different
- * family from the default writer, so the writer isn't grading its own work.
+ * model from the default writer, so the writer isn't grading its own work —
+ * and a small fast one, since the judge gets the shorter time slice.
  */
-const DEFAULT_JUDGE_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+const DEFAULT_JUDGE_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b";
 
 export type Provider = "nvidia" | "gemini";
 export type ModelRef = { provider: Provider; model: string };
@@ -310,10 +317,20 @@ async function runCandidates(
     }
     if (group.length === 0) break;
 
+    // A cold backend can sit on a connection for the entire budget (seen in
+    // production: one 36s cold start meant the models queued behind it were
+    // never tried at all). While others still wait in the queue, cap this
+    // group so at least one more group is guaranteed a real attempt.
+    const groupBudget =
+      queue.length > 0
+        ? // The extra second covers abort/cleanup overhead, so the reserved
+          // time is still a full MIN_ATTEMPT_MS when the next group starts.
+          Math.max(MIN_ATTEMPT_MS, remaining - MIN_ATTEMPT_MS - 1_000)
+        : remaining;
     const controllers = group.map(() => new AbortController());
     const timer = setTimeout(() => {
       controllers.forEach((c) => c.abort());
-    }, remaining);
+    }, groupBudget);
 
     try {
       const winner = await Promise.any(
@@ -344,7 +361,10 @@ export type CompletionOptions = {
    * NVIDIA race followed by the Gemini backstop. */
   candidates?: ModelRef[];
   /* Leave these models out of the default race (used to keep the
-   * self-review judge from also writing the draft it will grade). */
+   * self-review judge from also writing the draft it will grade). They are
+   * still tried dead last, after everything else has failed — a judge that
+   * writes is recoverable (the loop picks another judge), a failed request
+   * is not. */
   exclude?: ModelRef[];
 };
 
@@ -409,6 +429,19 @@ export async function chatCompletionWithModel(
         [{ provider: "gemini" as const, model: geminiModel() }].filter(
           (ref) => !exclude.some((x) => sameModel(x, ref))
         ),
+        { budgetMs: budgetMs - (Date.now() - started), maxTokens, raceSize: 1 },
+        attempts
+      );
+    }
+    if (!result && exclude.length > 0) {
+      // Last resort: the models held back for the self-review judge. Seen in
+      // production — the whole NVIDIA list down while Gemini sat excluded,
+      // failing the request outright. A draft written by the reserved judge
+      // beats no draft: the review loop picks a different judge for it, or
+      // honestly reports the draft as unreviewed.
+      result = await runCandidates(
+        messages,
+        exclude,
         { budgetMs: budgetMs - (Date.now() - started), maxTokens, raceSize: 1 },
         attempts
       );
