@@ -1,0 +1,41 @@
+# Deploys to Vercel production on every push to main, so a merged PR is live
+# without anyone remembering to run `npx vercel --prod` by hand (which was
+# forgotten more than once, and once shipped a stale main by accident).
+#
+# Vercel builds from the uploaded source itself, so this job doesn't build —
+# CI (ci.yml) has already linted/tested the PR before it could merge.
+#
+# Needs one repository secret: VERCEL_TOKEN, a personal token from
+# https://vercel.com/account/settings/tokens (scope: the mwihotis-projects
+# team). The org/project ids below are not secrets.
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://world-view-pi.vercel.app
+    env:
+      VERCEL_ORG_ID: team_eBdzJCK0DDWJVuiz6RaXq4S2
+      VERCEL_PROJECT_ID: prj_cA7XgSRbg94npVj8UTBXi6s1PLLB
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy to Vercel production
+        run: npx vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
