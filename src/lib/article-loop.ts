@@ -44,13 +44,21 @@ import { WRITING_GUIDE, WRITING_JUDGE_CRITERIA } from "./writing-guide";
 
 export const TOTAL_REQUEST_BUDGET_MS = 50_000;
 // Caps the very first generation call so it can't spend the entire request
-// budget by itself, guaranteeing the loop gets a real turn even in the
-// worst case (a slow model still leaves ~26s for at least one judge pass).
-export const INITIAL_DRAFT_BUDGET_MS = 24_000;
+// budget by itself. Generating a complete article takes the current NVIDIA
+// models 20-35s (measured 2026-10-21; the retired nemotron-3-super was
+// quicker, and 24s used to be enough) — so the draft gets most of the
+// budget, and the review loop takes whatever is left. A slow draft then
+// ships unreviewed (reported honestly as out-of-time) instead of the whole
+// request failing; a quick one still gets a judge pass and a revision.
+export const INITIAL_DRAFT_BUDGET_MS = 36_000;
 
 // A round costs a judge call plus, usually, a revise call — reserve enough
 // for both before starting one, or stop with whatever draft exists.
-const MIN_ROUND_BUDGET_MS = 16_000;
+// Just over a judge pass (12s): after a slow draft the loop can still get a
+// verdict on the record, even when no time is left to revise — a scored
+// draft beats an unreviewed one. Revision only starts when its own check
+// below passes.
+const MIN_ROUND_BUDGET_MS = 13_000;
 const JUDGE_BUDGET_MS = 12_000;
 export const MAX_ROUNDS = 3;
 const READY_SCORE = 8;
@@ -337,6 +345,7 @@ ${WRITING_GUIDE}
 Format your response exactly like this:
 - First line: the article title as a level-1 markdown heading (# Title)
 - Then the article body in markdown, using ## subheadings, short paragraphs, and lists where they help.
+- Aim for roughly 600-900 words unless the brief explicitly asks for longer.
 - No preamble, no commentary about the writing process — output only the article.${exampleBlock(examples)}`;
 
 export async function draftArticleMarkdown(
@@ -370,6 +379,10 @@ export async function draftArticleMarkdown(
   onProgress?.({ stage: "drafting" });
   const reserved = reservedJudge();
   const draft = await chatCompletionWithModel(history, {
+    // Generation time scales with output length — the current models write
+    // ~320 chars/s, so 2,000 tokens (~7,500 chars) lands around 25s, inside
+    // the drafting slice. The system prompt steers shorter than the cap.
+    maxTokens: 2000,
     budgetMs: INITIAL_DRAFT_BUDGET_MS - (Date.now() - started),
     exclude: reserved ? [reserved] : [],
   });

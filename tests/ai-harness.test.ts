@@ -121,24 +121,22 @@ describe("chatCompletionWithModel", () => {
     await mock.close();
   });
 
-  it("caps a slow group so queued models still get a turn", async () => {
-    // One cold backend must not eat the entire budget (seen in production:
-    // a 36s cold start starved every model queued behind it).
+  it("lets a slow-but-healthy model use the whole remaining budget", async () => {
+    // Articles take these models 20-35s to generate, so a race group must
+    // never be cut off early to save time for the models queued behind it —
+    // a cap that reserved time for them aborted healthy models
+    // mid-generation and broke drafting in production (2026-10-21).
     const mock = await startMockLLM(({ model }) =>
-      model === FALLBACK_MODELS[0] || model === FALLBACK_MODELS[1]
-        ? { delayMs: 60_000, reply: "too late" }
-        : "prompt answer"
+      model === FALLBACK_MODELS[0]
+        ? { delayMs: 11_000, reply: "slow but complete article" }
+        : { delayMs: 60_000, reply: "never" }
     );
     vi.stubEnv("NVIDIA_API_KEY", "k");
     vi.stubEnv("NVIDIA_ENDPOINT", mock.url);
-    const started = Date.now();
-    const result = await chatCompletionWithModel(messages, { budgetMs: 18_000 });
-    expect(result.text).toBe("prompt answer");
-    // The first group was cut off early enough for the second to answer
-    // within the overall budget.
-    expect(Date.now() - started).toBeLessThan(18_000);
+    const result = await chatCompletionWithModel(messages, { budgetMs: 13_000 });
+    expect(result.text).toBe("slow but complete article");
     await mock.close();
-  });
+  }, 20_000);
 
   it("tries explicit candidates one at a time, in order", async () => {
     const mock = await startMockLLM(({ model }) => (model === "a/one" ? { status: 404 } : `from ${model}`));
@@ -165,13 +163,13 @@ describe("judgeCandidates", () => {
     vi.stubEnv("GEMINI_API_KEY", "g");
     const list = judgeCandidates(writer);
     expect(list[0]).toEqual({ provider: "gemini", model: "gemini-3.8-flash" });
-    expect(list[1]).toEqual({ provider: "nvidia", model: "nvidia/nemotron-3.5-lightning-30b-a3b" });
+    expect(list[1]).toEqual({ provider: "nvidia", model: "nvidia/nemotron-3-ultra-550b-a55b" });
     expect(list).not.toContainEqual(writer);
   });
 
   it("uses Nemotron first without Gemini, and drops it if it wrote the draft", () => {
-    expect(judgeCandidates(writer)[0].model).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
-    const nemotron = { provider: "nvidia" as const, model: "nvidia/nemotron-3.5-lightning-30b-a3b" };
+    expect(judgeCandidates(writer)[0].model).toBe("nvidia/nemotron-3-ultra-550b-a55b");
+    const nemotron = { provider: "nvidia" as const, model: "nvidia/nemotron-3-ultra-550b-a55b" };
     expect(judgeCandidates(nemotron)).not.toContainEqual(nemotron);
   });
 
@@ -184,7 +182,7 @@ describe("judgeCandidates", () => {
 
   it("reserves the judge only when another model can still write", () => {
     vi.stubEnv("NVIDIA_API_KEY", "k");
-    expect(reservedJudge()?.model).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
+    expect(reservedJudge()?.model).toBe("nvidia/nemotron-3-ultra-550b-a55b");
     vi.stubEnv("NVIDIA_API_KEY", "");
     vi.stubEnv("GEMINI_API_KEY", "g");
     expect(reservedJudge()).toBeNull();
