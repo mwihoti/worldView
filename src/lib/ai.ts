@@ -28,9 +28,13 @@ import { APIError } from "payload";
 // next one in this list is tried. Order is fastest-verified first
 // (2026-10-21: ultra ~1.3s, lightning ~2.2s, gpt-oss-20b worked but took
 // ~36s from cold, deepseek timed out at 30s).
+// Fast generators first: latency on a one-word test says little — a full
+// article is ~2,000 output tokens, and the 550b ultra writes them far more
+// slowly than the 30b-a3b lightning. The first race group is lightning +
+// ultra; whichever finishes the whole article first wins.
 export const FALLBACK_MODELS = [
-  "nvidia/nemotron-3-ultra-550b-a55b",
   "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3-ultra-550b-a55b",
   "openai/gpt-oss-20b",
   "deepseek-ai/deepseek-v4.1-flash",
 ];
@@ -38,10 +42,11 @@ export const FALLBACK_MODELS = [
 /*
  * The self-review judge's preferred NVIDIA model when Gemini isn't available
  * to act as an independent reviewer (see judgeCandidates). A different
- * model from the default writer, so the writer isn't grading its own work —
- * and a small fast one, since the judge gets the shorter time slice.
+ * model from the usual writer (lightning), so the writer isn't grading its
+ * own work. The judge only emits a ~100-token verdict, so the big model's
+ * slower generation doesn't matter there.
  */
-const DEFAULT_JUDGE_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b";
+const DEFAULT_JUDGE_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
 
 export type Provider = "nvidia" | "gemini";
 export type ModelRef = { provider: Provider; model: string };
@@ -317,20 +322,17 @@ async function runCandidates(
     }
     if (group.length === 0) break;
 
-    // A cold backend can sit on a connection for the entire budget (seen in
-    // production: one 36s cold start meant the models queued behind it were
-    // never tried at all). While others still wait in the queue, cap this
-    // group so at least one more group is guaranteed a real attempt.
-    const groupBudget =
-      queue.length > 0
-        ? // The extra second covers abort/cleanup overhead, so the reserved
-          // time is still a full MIN_ATTEMPT_MS when the next group starts.
-          Math.max(MIN_ATTEMPT_MS, remaining - MIN_ATTEMPT_MS - 1_000)
-        : remaining;
+    // Each group may use everything that remains. A cap that reserved time
+    // for the models queued behind this group was tried and reverted: a full
+    // article takes these models 20-35s of generation (measured 2026-10-21),
+    // so any meaningful reservation aborts a healthy model mid-generation —
+    // that broke drafting outright. The defences against a dead first group
+    // are ordering (FALLBACK_MODELS leads with invocation-verified models),
+    // racing, and the Gemini backstop/last-resort in chatCompletionWithModel.
     const controllers = group.map(() => new AbortController());
     const timer = setTimeout(() => {
       controllers.forEach((c) => c.abort());
-    }, groupBudget);
+    }, remaining);
 
     try {
       const winner = await Promise.any(
@@ -410,7 +412,14 @@ export async function chatCompletionWithModel(
     );
   } else {
     const started = Date.now();
-    const nvidiaBudget = geminiKey
+    // Only carve out backstop time for Gemini when Gemini may actually act
+    // as the backstop — when it is excluded (reserved as the self-review
+    // judge), reserving a slice for it just shortens every NVIDIA attempt
+    // for nothing.
+    const geminiBackstop =
+      geminiKey &&
+      !exclude.some((x) => sameModel(x, { provider: "gemini", model: geminiModel() }));
+    const nvidiaBudget = geminiBackstop
       ? Math.round(budgetMs * (NVIDIA_BUDGET_MS / DEFAULT_TOTAL_BUDGET_MS))
       : budgetMs;
     result = await runCandidates(

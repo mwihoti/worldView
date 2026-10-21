@@ -104,7 +104,7 @@ describe("refineArticle", () => {
     const { review } = await refineArticle(history, ARTICLE, { writer, budgetMs: 40_000 });
     const judgeModels = mock.calls.filter((c) => c.isJudge).map((c) => c.model);
     expect(judgeModels).not.toContain(writer.model);
-    expect(review.judge).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
+    expect(review.judge).toBe("nvidia/nemotron-3-ultra-550b-a55b");
     expect(review.writer).toBe(writer.model);
   });
 
@@ -114,7 +114,7 @@ describe("refineArticle", () => {
     await refineArticle(history, ARTICLE, { writer, budgetMs: 45_000 });
     const writers = mock.calls.filter((c) => !c.isJudge).map((c) => c.model);
     expect(writers.length).toBeGreaterThan(0);
-    expect(writers).not.toContain("nvidia/nemotron-3.5-lightning-30b-a3b");
+    expect(writers).not.toContain("nvidia/nemotron-3-ultra-550b-a55b");
   });
 
   it("reports an unreadable verdict as 'reviewer unavailable', not approval", async () => {
