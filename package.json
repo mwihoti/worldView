@@ -60,6 +60,6 @@
   "type": "module",
   "overrides": {
     "undici": "^7.30.0",
-    "dompurify": "^3.4.16"
+    "dompurify": "^3.4.17"
   }
 }
